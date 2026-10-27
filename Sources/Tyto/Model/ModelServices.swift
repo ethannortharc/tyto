@@ -97,7 +97,10 @@ struct ProviderTemplate: Identifiable, Sendable {
             colors: [Color(red: 0.42, green: 0.45, blue: 0.95), Color(red: 0.28, green: 0.25, blue: 0.80)],
             note: "一个 key 用几百个模型；能听音频的模型（如 Gemini）也可以拿来做语音识别",
             capabilities: [.chat, .vision, .audioChat], keyPage: "https://openrouter.ai/keys",
-            suggested: [.audioChat: ["google/gemini-2.5-flash"]]),
+            // 2026-10 在 OpenRouter 上实测可用
+            suggested: [.chat: ["anthropic/claude-opus-5.5", "anthropic/claude-sonnet-5.5", "anthropic/claude-haiku-5.5"],
+                        .vision: ["anthropic/claude-opus-5.5", "anthropic/claude-sonnet-5.5", "google/gemini-2.5-flash"],
+                        .audioChat: ["google/gemini-2.5-flash", "google/gemini-3.5-flash", "google/gemini-2.5-flash-lite"]]),
         ProviderTemplate(
             id: "gemini", name: "Google Gemini", kind: .openAICompatible,
             baseURL: "https://generativelanguage.googleapis.com/v1beta/openai", symbol: "diamond.fill",

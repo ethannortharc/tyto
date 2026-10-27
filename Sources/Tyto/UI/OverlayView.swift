@@ -5,6 +5,7 @@ struct OverlayActions {
     var openMain: () -> Void = {}
     var hide: () -> Void = {}
     var quit: () -> Void = {}
+    var resetSize: () -> Void = {}
 }
 
 /// 悬浮窗：顶部控制栏，中间是原文/译文对照的字幕，底部是回复。
@@ -23,6 +24,12 @@ struct OverlayView: View {
     private var theme: OverlayTheme { OverlayTheme.of(settings.value.theme) }
 
     var body: some View {
+        GeometryReader { geometry in
+            content(height: geometry.size.height)
+        }
+    }
+
+    private func content(height: CGFloat) -> some View {
         VStack(spacing: 0) {
             header
             Hairline()
@@ -30,7 +37,7 @@ struct OverlayView: View {
                 transcript
                 if let notice = session.notice { noticeBanner(notice) }
             }
-            footer
+            footer(height: height)
         }
         .font(.system(size: settings.value.fontSize))
         .foregroundStyle(.white)
@@ -121,6 +128,7 @@ struct OverlayView: View {
                 Button { ui.clickThrough.toggle() } label: {
                     Label(ui.clickThrough ? "关闭点击穿透 ⌃⌥P" : "点击穿透 ⌃⌥P", systemImage: "cursorarrow.motionlines")
                 }
+                Button(action: actions.resetSize) { Label("恢复默认大小和位置", systemImage: "arrow.up.left.and.down.right.and.arrow.up.right.and.down.left") }
                 Button(action: actions.hide) { Label("隐藏悬浮窗 ⌃⌥T", systemImage: "eye.slash") }
             }
             Section {
@@ -227,12 +235,12 @@ struct OverlayView: View {
 
     // MARK: - 底部：回复
 
-    private var footer: some View {
+    /// 回复区最高占窗口的四成（没有字幕时，比如只用截屏回复，可以占到六成五）
+    private func footer(height: CGFloat) -> some View {
         VStack(spacing: 10) {
             if let reply = shownReply, !replyCollapsed {
-                // 没有字幕时（比如只用截屏回复）回复区可以更高
                 ReplyCard(reply: reply, session: session, theme: theme, flat: flatForPreview,
-                          maxHeight: session.rows.isEmpty ? 420 : 260)
+                          maxHeight: max(120, height * (session.rows.isEmpty ? 0.65 : 0.4) - 60))
             }
             HStack(spacing: 8) {
                 PillButton(title: session.selection.isEmpty ? "回复最近的话" : "回复选中的 \(session.selection.count) 句",

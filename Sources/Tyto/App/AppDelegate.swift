@@ -25,7 +25,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let actions = OverlayActions(
             openMain: { [weak self] in self?.openMainWindow() },
             hide: { [weak self] in self?.toggleOverlay() },
-            quit: { NSApp.terminate(nil) })
+            quit: { NSApp.terminate(nil) },
+            resetSize: { [weak self] in self?.overlay?.resetFrame() })
         let panel = OverlayPanel(rootView: OverlayView(session: session, settings: settings, ui: overlayState,
                                                        actions: actions))
         panel.orderFrontRegardless()

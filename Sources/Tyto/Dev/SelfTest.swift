@@ -12,6 +12,8 @@ import Foundation
 ///   Tyto --selftest-screenshot <图片> [--instruction 要求]                   截屏回复：本机 OCR + 大模型
 ///   Tyto --selftest-capture <frontWindow|screen> [--out 文件]                截图并认出是哪个 App
 ///   Tyto --selftest-providers <地址>                                      读模型列表、Ollama 检测和下载（对着模拟服务）
+///   Tyto --set-key <服务商 id> < key 文件                                  把 key 存进钥匙串
+///   Tyto --selftest-models <服务商 id>                                     读这个服务商的模型列表
 ///   Tyto --selftest-settings                                              读出现在的设置（老设置会被换算），只看不写
 ///   Tyto --selftest-deepgram                                              Deepgram 返回消息的解析
 ///   以上自测都可以加 --settings-json '{...}'，临时改设置，不写回
@@ -30,6 +32,17 @@ enum SelfTest {
         // --settings-json '{...}'：这次自测用的设置盖在现有设置上，不写回
         var current = settings.value
         if let json = value(after: "--settings-json") { current = SettingsStore.overriding(current, with: json) }
+        // --set-key <服务商 id>：从标准输入读 key 存进钥匙串（由 Tyto 自己写，以后读的时候不弹授权框）
+        if let id = value(after: "--set-key") {
+            let key = readLine(strippingNewline: true) ?? ""
+            Keychain.set(key, for: "provider.\(id)")
+            print(key.isEmpty ? "已删除「\(id)」的 key" : "已保存「\(id)」的 key（\(key.count) 个字符）")
+            exit(0)
+        }
+        if let id = value(after: "--selftest-models") {
+            Task { exit(await models(id, settings: current)) }
+            return true
+        }
         if arguments.contains("--selftest-settings") {
             exit(settingsSummary(current))
         }
@@ -227,6 +240,26 @@ enum SelfTest {
         let shot = SampleData.screenshotReply(thumbnail: sampleThumbnail())
         session.showSample(rows: [], replies: [shot], selection: [])
         return render(session: session, settings: settings, to: folderURL.appending(path: "screenshot-reply.png")) ? 0 : 1
+    }
+
+    static func models(_ id: String, settings: AppSettings) async -> Int32 {
+        guard let provider = settings.provider(id) else {
+            print("设置里没有服务商「\(id)」")
+            return 1
+        }
+        do {
+            let started = Date.now
+            let models = try await ModelList.fetch(provider)
+            print("\(provider.name)：\(models.count) 个模型，\(Int(Date.now.timeIntervalSince(started) * 1000)) ms")
+            for prefix in ["anthropic/claude", "google/gemini", "openai/gpt", "qwen/qwen", "deepseek/"] {
+                let matched = models.filter { $0.hasPrefix(prefix) }
+                if !matched.isEmpty { print("  \(prefix)…：\(matched.suffix(6).joined(separator: "、"))") }
+            }
+            return 0
+        } catch {
+            print("出错：\(error.localizedDescription)")
+            return 1
+        }
     }
 
     static func settingsSummary(_ settings: AppSettings) -> Int32 {
