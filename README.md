@@ -130,6 +130,18 @@ If you use speakers instead of headphones, the microphone also hears the remote 
 
 Apple's built-in text recognition (Vision) needs no download and is always available.
 
+**Advanced: Baidu Unlimited-OCR-2 (MLX, optional).** Open-sourced on 2026-10-26 under MIT: a ~3.3B mixture-of-experts model (~0.5B active) built for document parsing. It reads text more accurately than Apple's OCR (in testing it got "I need", question marks and em dashes right where Vision did not) and returns each block's position. It doesn't run on Ollama; start a small local server:
+
+```bash
+uv venv --python 3.12 ~/.tyto-ocr
+uv pip install --python ~/.tyto-ocr/bin/python "git+https://github.com/shuuul/mlx-vlm.git@223c2980fe4b48bd73faeb9e5bb1f1eacafffb49"
+~/.tyto-ocr/bin/python scripts/unlimited-ocr-server.py      # first run downloads the 4-bit model (~2.5 GB); port 18780
+```
+
+Then add a *Custom Endpoint* provider at `http://127.0.0.1:18780/v1`, use it for *Vision* with model `mlx-community/Unlimited-OCR-2-4bit`, and set screenshot replies to *Vision Model First*.
+
+Measured on an M4 Pro: 1.4 s for a chat screenshot, about 5 s for a dense mixed Chinese/English page, about 2.8 GB of memory; a full screenshot reply (local reading plus a cloud reply) took about 5 s. An M1 Pro with 16 GB runs it, likely about half as fast. On a CPU-only Linux box the official code also runs (its Triton kernels are only used on NVIDIA GPUs), but it needs ~7 GB of RAM in bf16 and likely tens of seconds per screenshot — too slow during a meeting; on Linux with an NVIDIA GPU, the official SGLang setup is fastest.
+
 ## Privacy: what leaves your Mac
 
 | Data | Where it goes |

@@ -726,7 +726,7 @@ enum ScreenshotReplier {
             let prompt = VisionPrompt(model: current.visionSlot.model, source: image.source)
             let reading = try await visionClient.complete(system: prompt.system, user: prompt.user,
                                                           images: [Screenshot.forModel(image.png)], maxTokens: 4_000)
-            ocr = "看图模型整理的内容：\n\(reading)\n\n本机 OCR 的原文（核对用）：\n\(ocr)"
+            ocr = "看图模型整理的内容：\n\(VisionPrompt.tidy(reading))\n\n本机 OCR 的原文（核对用）：\n\(ocr)"
         }
 
         let withImage = current.screenshotMode == .imageAndText

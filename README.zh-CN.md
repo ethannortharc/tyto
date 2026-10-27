@@ -130,6 +130,18 @@ Tyto 是仓鸮属的拉丁名——仓鸮在黑暗里只靠听声音就能定位
 
 系统自带的文字识别（Apple Vision）不用下载，一直可用。
 
+**进阶：百度 Unlimited-OCR-2（MLX 版，可选）**。2026-10-26 开源，MIT 许可证，约 33 亿参数的混合专家模型（每次只用约 5 亿），专门做文档解析，识字比系统自带的准（实测把系统 OCR 认错的"I need"、问号、破折号都认对了），还给出每段文字的位置。它不走 Ollama，要单独跑一个本机服务：
+
+```bash
+uv venv --python 3.12 ~/.tyto-ocr
+uv pip install --python ~/.tyto-ocr/bin/python "git+https://github.com/shuuul/mlx-vlm.git@223c2980fe4b48bd73faeb9e5bb1f1eacafffb49"
+~/.tyto-ocr/bin/python scripts/unlimited-ocr-server.py      # 第一次下载 4 位版约 2.5 GB，端口 18780
+```
+
+然后在「模型与服务」添加「自定义接口」，地址 `http://127.0.0.1:18780/v1`；「看图」选它，模型填 `mlx-community/Unlimited-OCR-2-4bit`；截屏回复选「先用看图模型读图」。
+
+实测（M4 Pro）：聊天截图读一次 1.4 秒，一整页密排的中英文约 5 秒，内存约 2.8 GB；整个截屏回复（读图 + 云端写回复）约 5 秒。M1 Pro 16 GB 能跑，估计慢一倍左右。Linux 只有 CPU 时官方代码也能跑（Triton 加速只在 NVIDIA 显卡上用），但要 bf16 约 7 GB 内存，速度估计一张几十秒，不适合边开会边用；有 NVIDIA 显卡的 Linux 用官方的 SGLang 最快。
+
 ## 隐私：哪些数据会离开这台 Mac
 
 | 数据 | 去哪 |

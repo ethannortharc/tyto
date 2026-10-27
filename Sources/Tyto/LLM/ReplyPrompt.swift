@@ -125,7 +125,11 @@ struct VisionPrompt {
         let lowered = model.lowercased()
         if lowered.contains("ocr") {
             system = ""
-            user = lowered.contains("deepseek") ? "Free OCR." : "Text Recognition:"
+            if lowered.contains("unlimited-ocr") || lowered.contains("unlimited_ocr") {
+                user = "Multi page parsing."
+            } else {
+                user = lowered.contains("deepseek") ? "Free OCR." : "Text Recognition:"
+            }
             return
         }
         system = "你把屏幕截图整理成文字，交给另一个助手去写回复。只整理看到的内容，不要回复，不要编造，看不清的写「?」。"
@@ -135,5 +139,35 @@ struct VisionPrompt {
         内容：按时间顺序，每条一行「发送人（时间）：内容」。我发的（通常在右边）发送人写「我」。邮件写出发件人、收件人、主题和正文。
         其他：附件、引用的消息、表情回应等要点。
         """
+    }
+}
+
+extension VisionPrompt {
+    private static let block = try! NSRegularExpression(
+        pattern: #"<BLOCK>[A-Za-z_]+(?:<LEVEL\d+>)?\[(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\]<FORK>"#)
+
+    /// 百度 Unlimited-OCR 的输出是"<BLOCK>类别[x0, y0, x1, y1]<FORK>文字"（坐标按 0～1000），
+    /// 换成和本机 OCR 一样的"[左]/[右] 文字"，回复模型才看得出聊天里哪句是谁发的。其他模型的输出原样返回。
+    static func tidy(_ output: String) -> String {
+        guard output.contains("<BLOCK>") else { return output }
+        var lines: [String] = []
+        for piece in output.replacingOccurrences(of: "<PAGE>", with: "").components(separatedBy: "<BLOCK>") {
+            let line = "<BLOCK>" + piece
+            let range = NSRange(line.startIndex..., in: line)
+            guard let match = block.firstMatch(in: line, range: range),
+                  let x0 = Int((line as NSString).substring(with: match.range(at: 1))),
+                  let x1 = Int((line as NSString).substring(with: match.range(at: 3))) else {
+                let text = piece.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty { lines.append(text) }
+                continue
+            }
+            let text = (line as NSString).substring(from: match.range.location + match.range.length)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            let center = (x0 + x1) / 2
+            let side = center < 420 ? "左" : center > 580 ? "右" : "中"
+            lines.append("[\(side)] \(text)")
+        }
+        return lines.joined(separator: "\n")
     }
 }

@@ -43,6 +43,11 @@ enum SelfTest {
             Task { exit(await models(id, settings: current)) }
             return true
         }
+        // --selftest-tidy <文件>：把 OCR 模型的原始输出整理成"[左]/[右] 文字"（看 Unlimited-OCR 的坐标换算对不对）
+        if let file = value(after: "--selftest-tidy") {
+            print(VisionPrompt.tidy((try? String(contentsOfFile: file, encoding: .utf8)) ?? ""))
+            exit(0)
+        }
         if arguments.contains("--selftest-settings") {
             exit(settingsSummary(current))
         }
