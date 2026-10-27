@@ -120,6 +120,10 @@ struct AppSettings: Codable, Equatable {
     // 界面语言
     var language: AppLanguage = .system
 
+    // 通用
+    /// 在程序坞显示图标（关掉后只在菜单栏有图标）
+    var showInDock = true
+
     // 设置窗口
     var iconStyle: IconStyle = .graphite
 

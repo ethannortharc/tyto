@@ -4,7 +4,7 @@ import Combine
 import SwiftUI
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemValidation {
     private let settings = SettingsStore()
     private lazy var skills = SkillStore()
     private lazy var session = SessionModel(settings: settings, skills: skills)
@@ -21,15 +21,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var mainWindow: NSWindow?
     private var statusItem: NSStatusItem?
     private let hotKeys = HotKeys()
+    private var updater: Updater?
+    /// 会话载入了没有。没载入就退出（自测、移到「应用程序」后重开）时不存会话，免得把真实记录盖成空的
+    private var sessionLoaded = false
     private var subscriptions: Set<AnyCancellable> = []
     private var sweepTask: Task<Void, Never>?
     private var optionTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if SelfTest.runIfRequested(settings: settings) { return }
+        // 从下载文件夹、磁盘映像里打开的：先问要不要移到「应用程序」（移了就从那里重开，这一份直接退出）
+        Installer.offerMoveToApplications()
 
-        NSApp.setActivationPolicy(.accessory)
+        updater = Updater()
+        applyDockPolicy()
+        setupMainMenu()
         session.load()
+        sessionLoaded = true
 
         let actions = OverlayActions(
             openMain: { [weak self] in self?.openMainWindow() },
@@ -53,6 +61,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setupStatusItem()
         registerHotKeys()
         hideAllWindowsFromSharing()
+        settings.$value.map(\.showInDock).removeDuplicates().dropFirst()
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.applyDockPolicy() } }
+            .store(in: &subscriptions)
+        settings.$value.map(\.language).removeDuplicates().dropFirst()
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.setupMainMenu() } }
+            .store(in: &subscriptions)
 
         if !UserDefaults.standard.bool(forKey: "launchedBefore") {
             UserDefaults.standard.set(true, forKey: "launchedBefore")
@@ -62,7 +76,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if CommandLine.arguments.contains("--start") { session.toggle() }
     }
 
+    /// 点程序坞图标：设置窗口没开（或缩到程序坞里了）就打开它
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if mainWindow?.isVisible != true || mainWindow?.isMiniaturized == true { openMainWindow() }
+        return true
+    }
+
+    /// 右键程序坞图标
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let menu = NSMenu()
+        menu.addItem(item(session.isRunning ? tr("停止听", "Stop Listening") : tr("开始听", "Start Listening"),
+                          "waveform", #selector(toggleListening)))
+        menu.addItem(item(overlay?.isVisible == true ? tr("隐藏悬浮窗", "Hide Overlay") : tr("显示悬浮窗", "Show Overlay"),
+                          "macwindow", #selector(toggleOverlayAction)))
+        let prompterItem = item(tr("提词器", "Prompter"), "doc.text", #selector(togglePrompterAction))
+        prompterItem.state = settings.value.showPrompter ? .on : .off
+        menu.addItem(prompterItem)
+        return menu
+    }
+
+    /// 在程序坞显示图标（普通 App），或者只在菜单栏（关掉程序坞图标时）
+    private func applyDockPolicy() {
+        let policy: NSApplication.ActivationPolicy = settings.value.showInDock ? .regular : .accessory
+        guard NSApp.activationPolicy() != policy else { return }
+        NSApp.setActivationPolicy(policy)
+        // 从程序坞模式换到只在菜单栏时，系统会把设置窗口藏到后面，拉回来
+        if mainWindow?.isVisible == true {
+            DispatchQueue.main.async {
+                NSApp.activate()
+                self.mainWindow?.makeKeyAndOrderFront(nil)
+            }
+        }
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard sessionLoaded else { return .terminateNow }
         guard session.isRunning else {
             session.save()
             return .terminateNow
@@ -80,7 +128,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func openMainWindow(page: SettingsPage? = nil) {
         if let page, let window = mainWindow {
             // 窗口里当前是哪一页是 MainView 自己的状态，要跳到指定的页就整个换掉
-            window.contentView = NSHostingView(rootView: MainView(session: session, settings: settings, skills: skills, initialPage: page))
+            window.contentView = NSHostingView(rootView: MainView(session: session, settings: settings, skills: skills,
+                                                                  updater: updater, initialPage: page))
         }
         if mainWindow == nil {
             let window = NSWindow(
@@ -94,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // 会议背景和记录也不能被共享出去
             window.sharingType = .none
             window.contentView = NSHostingView(rootView: MainView(session: session, settings: settings, skills: skills,
-                                                                  initialPage: page ?? .session))
+                                                                  updater: updater, initialPage: page ?? .session))
             window.center()
             window.setFrameAutosaveName("TytoMain")
             mainWindow = window
@@ -303,6 +352,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         languageItem.submenu = languages
         menu.addItem(languageItem)
         menu.addItem(item(tr("关于 Tyto 听译", "About Tyto"), "info.circle", #selector(about)))
+        if let updater, updater.isEnabled {
+            let check = item(tr("检查更新…", "Check for Updates…"), "arrow.triangle.2.circlepath", #selector(Updater.checkForUpdates(_:)))
+            check.target = updater
+            menu.addItem(check)
+        }
         menu.addItem(item(tr("退出", "Quit"), "power", #selector(quit), key: "q"))
     }
 
@@ -344,6 +398,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleSidecarAction() { settings.value.showReplyPanel.toggle() }
     @objc private func togglePrompterAction() { settings.value.showPrompter.toggle() }
     @objc private func openMainAction() { openMainWindow() }
+    @objc private func openNotesAction() {
+        settings.value.showPrompter = true
+        prompter.choose()
+    }
+    @objc private func helpAction() {
+        let readme = tr("https://github.com/ethannortharc/tyto/blob/main/README.zh-CN.md", "https://github.com/ethannortharc/tyto#readme")
+        if let url = URL(string: readme) { NSWorkspace.shared.open(url) }
+    }
     @objc private func quit() { NSApp.terminate(nil) }
     @objc private func about() {
         NSApp.activate()
@@ -358,6 +420,111 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func reply() {
         session.reply(to: session.selection.isEmpty ? nil : Array(session.selection))
         if overlay?.isVisible == false { overlay?.orderFrontRegardless() }
+    }
+
+    // MARK: - 主菜单
+
+    /// 屏幕顶上的菜单（Tyto 在前台时）：标准的 App、文件、编辑、显示、窗口、帮助。
+    /// 编辑菜单不能少：没有它，设置窗口的输入框里 ⌘C / ⌘V 不起作用
+    private func setupMainMenu() {
+        let main = NSMenu()
+
+        let app = NSMenu()
+        app.addItem(item(tr("关于 Tyto 听译", "About Tyto"), "info.circle", #selector(about)))
+        if let updater, updater.isEnabled {
+            let check = NSMenuItem(title: tr("检查更新…", "Check for Updates…"), action: #selector(Updater.checkForUpdates(_:)),
+                                   keyEquivalent: "")
+            check.target = updater
+            app.addItem(check)
+        }
+        app.addItem(.separator())
+        app.addItem(command(tr("设置…", "Settings…"), #selector(openMainAction), ",", target: self))
+        app.addItem(.separator())
+        let services = NSMenu()
+        let servicesItem = NSMenuItem(title: tr("服务", "Services"), action: nil, keyEquivalent: "")
+        servicesItem.submenu = services
+        app.addItem(servicesItem)
+        app.addItem(.separator())
+        app.addItem(command(tr("隐藏 Tyto", "Hide Tyto"), #selector(NSApplication.hide(_:)), "h"))
+        app.addItem(command(tr("隐藏其他", "Hide Others"), #selector(NSApplication.hideOtherApplications(_:)), "h",
+                            modifiers: [.command, .option]))
+        app.addItem(command(tr("全部显示", "Show All"), #selector(NSApplication.unhideAllApplications(_:)), ""))
+        app.addItem(.separator())
+        app.addItem(command(tr("退出 Tyto", "Quit Tyto"), #selector(quit), "q", target: self))
+        add(app, titled: "Tyto", to: main)
+
+        let file = NSMenu(title: tr("文件", "File"))
+        file.addItem(command(tr("打开提词材料…", "Open Notes…"), #selector(openNotesAction), "o", target: self))
+        file.addItem(.separator())
+        file.addItem(command(tr("关闭窗口", "Close Window"), #selector(NSWindow.performClose(_:)), "w"))
+        add(file, to: main)
+
+        let edit = NSMenu(title: tr("编辑", "Edit"))
+        edit.addItem(command(tr("撤销", "Undo"), Selector(("undo:")), "z"))
+        edit.addItem(command(tr("重做", "Redo"), Selector(("redo:")), "z", modifiers: [.command, .shift]))
+        edit.addItem(.separator())
+        edit.addItem(command(tr("剪切", "Cut"), #selector(NSText.cut(_:)), "x"))
+        edit.addItem(command(tr("拷贝", "Copy"), #selector(NSText.copy(_:)), "c"))
+        edit.addItem(command(tr("粘贴", "Paste"), #selector(NSText.paste(_:)), "v"))
+        edit.addItem(command(tr("全选", "Select All"), #selector(NSText.selectAll(_:)), "a"))
+        add(edit, to: main)
+
+        // 这些在会议软件在前台时也能用（全局快捷键），菜单里只是列出来
+        let view = NSMenu(title: tr("显示", "View"))
+        view.addItem(item(tr("开始 / 停止听", "Start / Stop Listening"), "waveform", #selector(toggleListening), key: "l"))
+        view.addItem(.separator())
+        view.addItem(item(tr("悬浮窗", "Overlay"), "macwindow", #selector(toggleOverlayAction), key: "t"))
+        view.addItem(item(tr("回复面板", "Replies Panel"), "sidebar.left", #selector(toggleSidecarAction), key: "b"))
+        view.addItem(item(tr("提词器", "Prompter"), "doc.text", #selector(togglePrompterAction), key: "n"))
+        view.addItem(item(tr("显示译文", "Show Translation"), "character.bubble", #selector(toggleTranslation)))
+        view.addItem(item(tr("点击穿透", "Click-Through"), "cursorarrow.motionlines", #selector(toggleClickThrough), key: "p"))
+        add(view, to: main)
+
+        let window = NSMenu(title: tr("窗口", "Window"))
+        window.addItem(command(tr("最小化", "Minimize"), #selector(NSWindow.performMiniaturize(_:)), "m"))
+        window.addItem(command(tr("缩放", "Zoom"), #selector(NSWindow.performZoom(_:)), ""))
+        window.addItem(.separator())
+        window.addItem(command(tr("前置全部窗口", "Bring All to Front"), #selector(NSApplication.arrangeInFront(_:)), ""))
+        add(window, to: main)
+
+        let help = NSMenu(title: tr("帮助", "Help"))
+        help.addItem(command(tr("Tyto 使用说明", "Tyto Help"), #selector(helpAction), "?", target: self))
+        add(help, to: main)
+
+        NSApp.mainMenu = main
+        NSApp.servicesMenu = services
+        NSApp.windowsMenu = window
+        NSApp.helpMenu = help
+    }
+
+    /// 主菜单「显示」里的开关打勾（每次打开菜单时问一次）
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem.menu?.supermenu === NSApp.mainMenu else { return true }
+        switch menuItem.action {
+        case #selector(toggleOverlayAction): menuItem.state = overlay?.isVisible == true ? .on : .off
+        case #selector(toggleSidecarAction): menuItem.state = settings.value.showReplyPanel ? .on : .off
+        case #selector(togglePrompterAction): menuItem.state = settings.value.showPrompter ? .on : .off
+        case #selector(toggleTranslation): menuItem.state = settings.value.translationEnabled ? .on : .off
+        case #selector(toggleClickThrough): menuItem.state = overlayState.clickThrough ? .on : .off
+        case #selector(toggleListening): menuItem.state = session.isRunning ? .on : .off
+        default: break
+        }
+        return true
+    }
+
+    private func add(_ menu: NSMenu, titled title: String? = nil, to main: NSMenu) {
+        let item = NSMenuItem(title: title ?? menu.title, action: nil, keyEquivalent: "")
+        item.submenu = menu
+        main.addItem(item)
+    }
+
+    /// 普通的 ⌘ 菜单项；target 为 nil 时交给当前窗口（拷贝、粘贴、关闭窗口这类）
+    private func command(_ title: String, _ action: Selector, _ key: String,
+                         modifiers: NSEvent.ModifierFlags = [.command], target: AnyObject? = nil) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.keyEquivalentModifierMask = modifiers
+        item.target = target
+        return item
     }
 
     // MARK: - 快捷键

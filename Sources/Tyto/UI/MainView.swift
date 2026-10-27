@@ -8,12 +8,16 @@ struct MainView: View {
     @ObservedObject var session: SessionModel
     @ObservedObject var settings: SettingsStore
     @ObservedObject var skills: SkillStore
+    /// 自动更新；画预览图时没有
+    let updater: Updater?
     @State private var page: SettingsPage?
 
-    init(session: SessionModel, settings: SettingsStore, skills: SkillStore, initialPage: SettingsPage = .session) {
+    init(session: SessionModel, settings: SettingsStore, skills: SkillStore, updater: Updater? = nil,
+         initialPage: SettingsPage = .session) {
         self.session = session
         self.settings = settings
         self.skills = skills
+        self.updater = updater
         _page = State(initialValue: initialPage)
     }
 
@@ -55,6 +59,7 @@ struct MainView: View {
         case .listen: ListenPage(settings: settings)
         case .translation: TranslationPage(settings: settings, session: session)
         case .screenshot: ScreenshotPage(settings: settings)
+        case .general: GeneralPage(settings: settings, updater: updater)
         case .services: ServicesPage(settings: settings)
         case .appearance: AppearancePage(settings: settings)
         case .shortcuts: ShortcutsPage()
@@ -64,7 +69,7 @@ struct MainView: View {
 }
 
 enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
-    case session, skills, listen, translation, screenshot, services, appearance, shortcuts, permissions
+    case session, skills, listen, translation, screenshot, general, services, appearance, shortcuts, permissions
 
     var id: String { rawValue }
 
@@ -75,6 +80,7 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
         case .listen: tr("听写", "Listening")
         case .translation: tr("翻译", "Translation")
         case .screenshot: tr("截屏回复", "Screenshot Reply")
+        case .general: tr("通用", "General")
         case .services: tr("模型与服务", "Models & Services")
         case .appearance: tr("外观", "Appearance")
         case .shortcuts: tr("快捷键", "Shortcuts")
@@ -89,6 +95,7 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
         case .listen: tr("听哪些声音，怎么把声音变成文字。", "Which sounds to listen to, and how to turn them into text.")
         case .translation: tr("每句话下面显示译文，悬浮窗顶部一键开关。", "Shows a translation under each line. One-click toggle at the top of the overlay.")
         case .screenshot: tr("截下最前面的 App 或整个屏幕，读懂内容，写好能直接粘贴的回复。", "Capture the frontmost app or the whole screen, read it, and write a reply you can paste right away.")
+        case .general: tr("开机自动打开、程序坞图标、自动更新。", "Open at login, the Dock icon, and updates.")
         case .services: tr("服务商只配一次，回复、看图、翻译、语音识别都从这里选。", "Set up each provider once; Reply, Vision, Translation and Speech Recognition all pick from here.")
         case .appearance: tr("主题、透明度和字号。下面是实时预览。", "Theme, tint and font size. Live preview below.")
         case .shortcuts: tr("会议软件在前台时也能用。", "Works while the meeting app is in front.")
@@ -103,6 +110,7 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
         case .listen: "waveform"
         case .translation: "character.bubble.fill"
         case .screenshot: "camera.viewfinder"
+        case .general: "gearshape.fill"
         case .services: "square.stack.3d.up.fill"
         case .appearance: "paintpalette.fill"
         case .shortcuts: "command"
@@ -118,6 +126,7 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
         case .listen: 0xA8625A
         case .translation: 0x6B8868
         case .screenshot: 0x5A8682
+        case .general: 0x6E6A63
         case .services: 0x5C6573
         case .appearance: 0xAA7656
         case .shortcuts: 0x75736D
@@ -132,7 +141,7 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
     static var groups: [(title: String, pages: [SettingsPage])] { [
         (tr("会议", "Meeting"), [.session, .skills]),
         (tr("功能", "Features"), [.listen, .translation, .screenshot]),
-        (tr("设置", "Settings"), [.services, .appearance, .shortcuts, .permissions]),
+        (tr("设置", "Settings"), [.general, .services, .appearance, .shortcuts, .permissions]),
     ] }
 }
 
@@ -1327,6 +1336,109 @@ private struct ThemeSwatch: View {
 
 // MARK: - 快捷键
 
+/// 通用：开机自动打开、程序坞图标、自动更新
+private struct GeneralPage: View {
+    @ObservedObject var settings: SettingsStore
+    let updater: Updater?
+    @State private var opensAtLogin = Installer.opensAtLogin
+    @State private var needsApproval = Installer.loginNeedsApproval
+    @State private var loginError: String?
+
+    var body: some View {
+        Form {
+            Section {
+                Row(symbol: "power", title: tr("开机时自动打开", "Open at Login"),
+                    detail: tr("登录后 Tyto 在后台待命：悬浮窗、菜单栏图标和快捷键都在。", "After you log in, Tyto waits in the background: overlay, menu bar icon and shortcuts are ready.")) {
+                    Toggle("", isOn: Binding(get: { opensAtLogin }, set: { on in
+                        do {
+                            try Installer.setOpensAtLogin(on)
+                            loginError = nil
+                        } catch {
+                            loginError = error.localizedDescription
+                        }
+                        refresh()
+                    }))
+                    .labelsHidden()
+                }
+                if needsApproval {
+                    Row(symbol: "exclamationmark.triangle", title: tr("要在系统设置里同意", "Needs your approval in System Settings"),
+                        detail: tr("系统设置 → 通用 → 登录项与扩展，打开 Tyto。", "System Settings → General → Login Items & Extensions, turn on Tyto.")) {
+                        Button(tr("打开登录项设置", "Open Login Items")) { Installer.openLoginItemsSettings() }
+                    }
+                }
+                if let loginError {
+                    Text(loginError).font(.caption).foregroundStyle(.orange)
+                }
+                Row(symbol: "dock.rectangle", title: tr("在程序坞显示", "Show in Dock"),
+                    detail: tr("关掉后只在菜单栏有图标，⌘Tab 里也看不到 Tyto。", "When off, Tyto only has a menu bar icon and doesn't appear in ⌘Tab.")) {
+                    Toggle("", isOn: $settings.value.showInDock).labelsHidden()
+                }
+            } header: {
+                Text(tr("启动", "Startup"))
+            } footer: {
+                Text(tr("关掉这个窗口时 Tyto 还在后台运行；要完全退出用 ⌘Q 或菜单栏里的「退出」。",
+                        "Closing this window keeps Tyto running in the background; quit with ⌘Q or Quit in the menu bar."))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            if let updater, updater.isEnabled {
+                UpdateSection(updater: updater)
+            } else {
+                Section(tr("更新", "Updates")) {
+                    Row(symbol: "hammer", title: tr("自己编译的版本不自动更新", "Builds from source don't update themselves"),
+                        detail: tr("从 GitHub 下载安装的 Tyto 才会自动更新。", "Tyto installed from GitHub Releases updates itself.")) {
+                        Button(tr("去下载", "Download")) {
+                            if let url = URL(string: "https://github.com/ethannortharc/tyto/releases/latest") { NSWorkspace.shared.open(url) }
+                        }
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear(perform: refresh)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refresh() }
+    }
+
+    private func refresh() {
+        opensAtLogin = Installer.opensAtLogin
+        needsApproval = Installer.loginNeedsApproval
+    }
+}
+
+/// 自动更新的开关和「现在检查」
+private struct UpdateSection: View {
+    @ObservedObject var updater: Updater
+
+    var body: some View {
+        Section {
+            Row(symbol: "arrow.triangle.2.circlepath", title: tr("自动检查更新", "Check for Updates Automatically"),
+                detail: tr("每天查一次 GitHub 上有没有新版。", "Checks GitHub for a new version once a day.")) {
+                Toggle("", isOn: Binding(get: { updater.automaticallyChecks }, set: { updater.automaticallyChecks = $0 }))
+                    .labelsHidden()
+            }
+            Row(symbol: "arrow.down.circle", title: tr("自动下载并安装", "Download and Install Automatically"),
+                detail: tr("新版在后台下载好，下次退出 Tyto 时装上，开会时不打扰。关掉的话，有新版会先问你。",
+                           "New versions download in the background and install the next time you quit Tyto, never mid-meeting. When off, Tyto asks first.")) {
+                Toggle("", isOn: Binding(get: { updater.automaticallyDownloads }, set: { updater.automaticallyDownloads = $0 }))
+                    .labelsHidden()
+                    .disabled(!updater.automaticallyChecks)
+            }
+            Row(symbol: "info.circle", title: tr("当前版本 \(Self.version)", "Version \(Self.version)"),
+                detail: updater.lastCheck.map { tr("上次检查：\($0.formatted(date: .abbreviated, time: .shortened))",
+                                                   "Last checked: \($0.formatted(date: .abbreviated, time: .shortened))") }) {
+                Button(tr("现在检查…", "Check Now…")) { updater.checkForUpdates(nil) }
+                    .disabled(!updater.canCheck)
+            }
+        } header: {
+            Text(tr("更新", "Updates"))
+        }
+    }
+
+    static var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+    }
+}
+
 private struct ShortcutsPage: View {
     private let items: [(keys: [String], title: String, symbol: String)] = [
         (["⌃", "⌥", "L"], tr("开始 / 停止听", "Start / Stop Listening"), "record.circle"),
@@ -1335,6 +1447,9 @@ private struct ShortcutsPage: View {
         (["⌃", "⌥", "A"], tr("截屏回复：框选一块", "Screenshot Reply: Select Area"), "rectangle.dashed"),
         (["⌃", "⌥", "T"], tr("显示 / 隐藏悬浮窗", "Show / Hide Overlay"), "macwindow"),
         (["⌃", "⌥", "B"], tr("打开 / 收起回复面板", "Show / Hide Replies Panel"), "sidebar.left"),
+        (["⌃", "⌥", "N"], tr("打开 / 收起提词器", "Show / Hide Prompter"), "doc.text"),
+        (["⌃", "⌥", "↑ / ↓"], tr("提词器：上一节 / 下一节（提词器开着时）", "Prompter: Previous / Next Section (while open)"), "arrow.up.arrow.down"),
+        (["⌃", "⌥", "J"], tr("提词器：跳到对方刚提到的那一节", "Prompter: Go to the Section They Mentioned"), "arrow.turn.down.right"),
         (["⌃", "⌥", "P"], tr("点击穿透开 / 关", "Click-Through On / Off"), "cursorarrow.motionlines"),
         (["⌃", "⌥", "Q"], tr("退出 Tyto", "Quit Tyto"), "power"),
     ]
@@ -1416,7 +1531,7 @@ private struct PermissionsPage: View {
 
             Section {
                 HStack(spacing: 14) {
-                    IconTile(symbol: "ear.fill", colors: Brand.graphite, size: 52)
+                    Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 60, height: 60)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(tr("Tyto 听译", "Tyto")).font(.system(size: 16, weight: .bold))
                         Text(tr("版本 \(version)", "Version \(version)"))

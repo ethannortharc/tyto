@@ -6,6 +6,8 @@
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>Tyto</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleExecutable</key>
 	<string>Tyto</string>
 	<key>CFBundleIdentifier</key>
@@ -25,8 +27,6 @@
 	<string>3</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
-	<key>LSUIElement</key>
-	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
@@ -42,6 +42,14 @@
 	<string>Tyto listens to the microphone (you and others in the room) to turn speech into captions.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/ethannortharc/tyto/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>cut3Y/MxEMbzJkT1lx1i6eEVmlbbGDTM1lhFNdWgFzw=</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Tyto turns speech into text on this Mac.</string>
 </dict>

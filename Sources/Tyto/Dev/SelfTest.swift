@@ -1,5 +1,6 @@
 @preconcurrency import AVFAudio
 import ImageIO
+import Markdown
 import ScreenCaptureKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -23,6 +24,9 @@ import Foundation
 ///   Tyto --selftest-followup                                              回复建议之后"我实际说的"：找哪几句、判照着说/改了说法/没回
 ///   Tyto --selftest-backdrop                                              字色自动：在屏幕上放白底页面和会议画面，量亮度，看选白字还是黑字
 enum SelfTest {
+    /// 自测期间要一直活着的对象
+    @MainActor static var keepAlive: AnyObject?
+
     @MainActor
     static func runIfRequested(settings: SettingsStore) -> Bool {
         let arguments = CommandLine.arguments
@@ -78,6 +82,30 @@ enum SelfTest {
             let appName = value(after: "--app")
             Task { exit(await screenshot(file: file, instruction: instruction, appName: appName, settings: current)) }
             return true
+        }
+        // --selftest-update <appcast 地址>：真的走一遍自动更新（scripts/test-update.sh 用，会替换这个 App 自己）
+        if let feed = value(after: "--selftest-update") {
+            let updater = Updater(feedOverride: feed, forceEnabled: true)
+            updater.relaunchesAfterUpdate = false
+            updater.automaticallyDownloads = true
+            updater.onEvent = { event in
+                print("update: \(event)")
+                if event.hasPrefix("error") || event == "no update" { exit(1) }
+                // 下载好了：像平时一样退出，Sparkle 在退出时装新版
+                if event.hasPrefix("ready") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { NSApp.terminate(nil) } }
+            }
+            updater.updater.checkForUpdatesInBackground()
+            SelfTest.keepAlive = updater
+            DispatchQueue.main.asyncAfter(deadline: .now() + 90) {
+                print("update: timeout")
+                exit(1)
+            }
+            return true
+        }
+        // --markdown-to-html <文件>：Markdown 转 HTML（发版时写 appcast 里的更新说明）
+        if let file = value(after: "--markdown-to-html") {
+            print(HTMLFormatter.format((try? String(contentsOfFile: file, encoding: .utf8)) ?? ""))
+            exit(0)
         }
         // --selftest-prompter [截图文件夹]：提词器（会在屏幕上开一个窗口几秒）
         if arguments.contains("--selftest-prompter") {

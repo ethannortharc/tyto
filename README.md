@@ -39,10 +39,13 @@ A floating meeting assistant for macOS. It turns what people say into live capti
 
 Requires **macOS 26** or later on Apple silicon.
 
-1. Download the latest `Tyto-x.y.z.zip` from [Releases](../../releases) and unzip it.
-2. Move `Tyto.app` to Applications and open it.
+1. Download the latest `Tyto-x.y.z.dmg` from [Releases](../../releases) and open it.
+2. Drag `Tyto` onto `Applications`, then open it from Applications.
 
-The app is notarized by Apple, so it opens normally. Tyto has no Dock icon — look for the ear in the menu bar.
+The app is notarized by Apple, so it opens normally. If you open it from somewhere else, Tyto offers to move itself to Applications.
+
+- **Updates**: Tyto checks GitHub once a day, downloads new versions in the background, and installs them the next time you quit, never mid-meeting. *Settings → General* turns this off or checks now; it's also under the Tyto menu → *Check for Updates…*. Every update is verified with Tyto's signing key before it's installed.
+- **Always there**: Tyto has a Dock icon and a menu bar icon (the ear). Closing the settings window or minimizing it keeps Tyto running with the overlay and shortcuts; quit with ⌘Q. *Settings → General* can open Tyto at login, or hide the Dock icon to keep only the menu bar icon.
 
 ## First run
 
@@ -155,6 +158,7 @@ Measured on an M4 Pro: 1.4 s for a chat screenshot, about 5 s for a dense mixed 
 | Meeting audio | Nowhere with Apple on-device recognition; to your chosen service with cloud recognition |
 | Caption text | Nowhere with Apple translation; to your chosen model for replies and model translation |
 | Prompter notes | Only read on your Mac; Follow and hints match words locally |
+| Update checks | Once a day Tyto downloads `appcast.xml` from GitHub Releases; nothing about you or your Mac is sent |
 | What's behind the overlay and prompter | With *Auto* text color, every 2.5 s that area is scaled to 16×16 to get its average brightness, on your Mac only, never saved; not read when the text color is fixed |
 | Screenshots | Depends on the reading mode above; nowhere with a local model or OCR only |
 | Keys | Only in this Mac's keychain |
@@ -168,8 +172,12 @@ Requires Xcode 26 (Swift 6.2).
 scripts/build-app.sh               # development build: build/Tyto.app (Apple Development signing)
 open build/Tyto.app
 scripts/build-app.sh ShareCheck    # screen-share check app: build/TytoShareCheck.app
-scripts/release.sh                 # release: Developer ID signing + notarization → dist/Tyto-<version>.zip
+scripts/release.sh notes.md        # release: Developer ID signing + notarization → dist/Tyto-<version>.dmg, .zip, appcast.xml
+scripts/test-update.sh             # real auto-update run: an old build finds, verifies and installs a new one; a tampered one is refused
+swift scripts/make-icon.swift owl icon.png && scripts/build-icon.sh icon.png   # redraw the app icon
 ```
+
+Updates are signed with an EdDSA key kept outside the repository (`~/.config/tyto-release/sparkle-ed25519-private.key` by default; the public key is `SUPublicEDKey` in `Resources/Tyto-Info.plist`). Builds in `build/` don't update themselves.
 
 macOS remembers permissions by code signature; signing with a fixed certificate keeps them across rebuilds.
 
@@ -198,7 +206,7 @@ Add `--settings-json '{...}'` to any of them to override settings without saving
 
 ```
 Sources/Tyto/
-  App/        launch, menu bar, global shortcuts
+  App/        launch, menus, Dock, global shortcuts, auto-update (Sparkle), move to Applications, open at login
   Audio/      system audio (Core Audio process tap), microphone, resampling
   Speech/     Apple SpeechAnalyzer, Soniox, Deepgram, pause-based chunking
   Translate/  Apple on-device translation, model translation
@@ -221,5 +229,7 @@ Sources/ShareCheck/   screen-share check app
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+Tyto bundles [Sparkle](https://sparkle-project.org) (MIT) for updates and [swift-markdown](https://github.com/swiftlang/swift-markdown) (Apache 2.0) with [cmark-gfm](https://github.com/swiftlang/swift-cmark) (BSD-2) for the prompter; their licenses ship inside the app under `Contents/Resources/Licenses`.
 
 © 2026 Ethan H.B. Zhou

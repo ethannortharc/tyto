@@ -39,10 +39,13 @@ Tyto 是仓鸮属的拉丁名——仓鸮在黑暗里只靠听声音就能定位
 
 要求 **macOS 26** 或更新，Apple 芯片。
 
-1. 到 [Releases](../../releases) 下载最新的 `Tyto-x.y.z.zip`，解压。
-2. 把 `Tyto.app` 拖进「应用程序」文件夹，打开。
+1. 到 [Releases](../../releases) 下载最新的 `Tyto-x.y.z.dmg`，打开。
+2. 把 `Tyto` 拖到旁边的「应用程序」上，再从「应用程序」里打开。
 
-应用已经过 Apple 公证，可以直接打开。Tyto 没有 Dock 图标，菜单栏里的耳朵图标就是它。
+应用已经过 Apple 公证，可以直接打开。从别的地方打开时，Tyto 会问要不要把自己移到「应用程序」。
+
+- **自动更新**：每天查一次 GitHub 上有没有新版，有就在后台下载好，下次退出 Tyto 时装上，开会时不打扰。「设置 → 通用」里可以关掉或马上检查；Tyto 菜单里也有「检查更新…」。每个更新包都要先用 Tyto 的签名密钥验过才会装。
+- **常驻**：程序坞和菜单栏（耳朵图标）里都有 Tyto。关掉或最小化设置窗口，Tyto 还在后台运行，悬浮窗和快捷键照常可用；要退出用 ⌘Q。「设置 → 通用」里可以开机自动打开，也可以不在程序坞显示、只留菜单栏图标。
 
 ## 第一次使用
 
@@ -155,6 +158,7 @@ uv pip install --python ~/.tyto-ocr/bin/python "git+https://github.com/shuuul/ml
 | 会议声音 | 用 Apple 本机识别时不出本机；用云端识别时发给你选的识别服务 |
 | 字幕文字 | 用 Apple 本机翻译时不出本机；生成回复、大模型翻译时发给你选的模型服务 |
 | 提词器的材料 | 只在本机读；跟读和提示都在本机比对 |
+| 检查更新 | 每天从 GitHub Releases 下载一次 `appcast.xml`，不发送任何关于你或这台 Mac 的信息 |
 | 悬浮窗、提词器后面的画面 | 字色「自动」时每 2.5 秒取一次那块区域，缩到 16×16 算平均亮度，只在本机算，不存图；字色固定时不取 |
 | 截图 | 按你选的读图方式（见上表）；选本机模型或只用 OCR 时不出本机 |
 | key | 只存在这台 Mac 的钥匙串里 |
@@ -168,8 +172,12 @@ uv pip install --python ~/.tyto-ocr/bin/python "git+https://github.com/shuuul/ml
 scripts/build-app.sh               # 开发版：build/Tyto.app（用 Apple Development 证书签名）
 open build/Tyto.app
 scripts/build-app.sh ShareCheck    # 共享屏幕验证程序：build/TytoShareCheck.app
-scripts/release.sh                 # 发布版：Developer ID 签名 + 公证 → dist/Tyto-<版本>.zip
+scripts/release.sh notes.md        # 发布版：Developer ID 签名 + 公证 → dist/Tyto-<版本>.dmg、.zip、appcast.xml
+scripts/test-update.sh             # 真的走一遍自动更新：旧版找到、验签、装上新版；篡改过的包拒绝
+swift scripts/make-icon.swift owl icon.png && scripts/build-icon.sh icon.png   # 重画程序图标
 ```
+
+更新包用 EdDSA 密钥签名，私钥不在仓库里（默认 `~/.config/tyto-release/sparkle-ed25519-private.key`，公钥是 `Resources/Tyto-Info.plist` 里的 `SUPublicEDKey`）。`build/` 里的开发版不会自动更新。
 
 系统权限是按签名记的，用固定证书签名，重新编译后权限不会丢。
 
@@ -198,7 +206,7 @@ scripts/release.sh                 # 发布版：Developer ID 签名 + 公证 �
 
 ```
 Sources/Tyto/
-  App/        启动、菜单栏、全局快捷键
+  App/        启动、菜单、程序坞、全局快捷键、自动更新（Sparkle）、移到「应用程序」、开机自动打开
   Audio/      系统声音（Core Audio 进程音频捕获）、麦克风、重采样
   Speech/     识别：Apple SpeechAnalyzer、Soniox、Deepgram、按停顿切句上传
   Translate/  Apple 本机翻译、大模型翻译
@@ -221,5 +229,7 @@ Sources/ShareCheck/   共享屏幕验证程序
 ## 许可证
 
 MIT，见 [LICENSE](LICENSE)。
+
+Tyto 带了 [Sparkle](https://sparkle-project.org)（MIT，自动更新）和 [swift-markdown](https://github.com/swiftlang/swift-markdown)（Apache 2.0）、[cmark-gfm](https://github.com/swiftlang/swift-cmark)（BSD-2，提词器）；它们的许可证随 App 放在 `Contents/Resources/Licenses` 里。
 
 © 2026 Ethan H.B. Zhou
