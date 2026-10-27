@@ -95,7 +95,7 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
         case .listen: tr("听哪些声音，怎么把声音变成文字。", "Which sounds to listen to, and how to turn them into text.")
         case .translation: tr("每句话下面显示译文，悬浮窗顶部一键开关。", "Shows a translation under each line. One-click toggle at the top of the overlay.")
         case .screenshot: tr("截下最前面的 App 或整个屏幕，读懂内容，写好能直接粘贴的回复。", "Capture the frontmost app or the whole screen, read it, and write a reply you can paste right away.")
-        case .general: tr("开机自动打开、程序坞图标、自动更新。", "Open at login, the Dock icon, and updates.")
+        case .general: tr("开机自动打开、程序坞图标、共享屏幕、自动更新。", "Open at login, the Dock icon, screen sharing, and updates.")
         case .services: tr("服务商只配一次，回复、看图、翻译、语音识别都从这里选。", "Set up each provider once; Reply, Vision, Translation and Speech Recognition all pick from here.")
         case .appearance: tr("主题、透明度和字号。下面是实时预览。", "Theme, tint and font size. Live preview below.")
         case .shortcuts: tr("会议软件在前台时也能用。", "Works while the meeting app is in front.")
@@ -726,8 +726,12 @@ private struct ProviderRow: View {
     let remove: () -> Void
 
     @State private var key = ""
+    /// 刚改过 key：存好了，或者存不进去的原因
+    @State private var saved: Result<Void, KeyError>?
     @State private var test: String?
     @State private var testing = false
+
+    struct KeyError: Error { let message: String }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -766,13 +770,29 @@ private struct ProviderRow: View {
                     if provider.needsKey {
                         Row(symbol: "key.fill", title: "API key") {
                             HStack(spacing: 6) {
-                                SecureField("", text: $key).frame(maxWidth: 220)
-                                    .onChange(of: key) { provider.setKey(key) }
+                                SecureField("", text: $key, prompt: Text(tr("粘贴 key", "Paste key"))).frame(maxWidth: 220)
+                                    .onChange(of: key) { _, new in
+                                        guard new != (Keychain.get("provider.\(provider.id)") ?? "") else { return }
+                                        if let error = provider.setKey(new) {
+                                            saved = .failure(KeyError(message: error))
+                                        } else {
+                                            saved = .success(())
+                                        }
+                                    }
+                                switch saved {
+                                case .success: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).help(tr("已存进钥匙串", "Saved to the Keychain"))
+                                case .failure(let error): Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).help(error.message)
+                                case nil: EmptyView()
+                                }
                                 if let page = provider.info.keyPage, let url = URL(string: page) {
                                     Link(destination: url) { Image(systemName: "arrow.up.right.square") }.help(tr("去拿 key", "Get a key"))
                                 }
                             }
                         }
+                    }
+                    if case .failure(let error) = saved {
+                        Text(tr("存不进钥匙串：\(error.message)", "Couldn't save to the Keychain: \(error.message)"))
+                            .font(.caption).foregroundStyle(.orange)
                     }
                     HStack(spacing: 10) {
                         Button(role: .destructive, action: remove) { Label(tr("删除", "Delete"), systemImage: "trash") }
@@ -1379,6 +1399,16 @@ private struct GeneralPage: View {
                 Text(tr("关掉这个窗口时 Tyto 还在后台运行；要完全退出用 ⌘Q 或菜单栏里的「退出」。",
                         "Closing this window keeps Tyto running in the background; quit with ⌘Q or Quit in the menu bar."))
                     .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
+                Row(symbol: "eye.slash", title: tr("开始听时隐藏程序坞和菜单栏图标", "Hide Dock and Menu Bar Icons While Listening"),
+                    detail: tr("Tyto 的窗口本来就不会被共享出去；整屏共享时对方还能看到程序坞和菜单栏，打开这项后，听的时候连图标也藏起来，停止听再出现。快捷键照常可用。",
+                               "Tyto's windows never show up in a screen share. When you share the whole screen, the Dock and menu bar still do; with this on, Tyto's icons hide too while listening and come back when you stop. Shortcuts keep working.")) {
+                    Toggle("", isOn: $settings.value.hideIconsWhileListening).labelsHidden()
+                }
+            } header: {
+                Text(tr("共享屏幕", "Screen Sharing"))
             }
 
             if let updater, updater.isEnabled {

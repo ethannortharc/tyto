@@ -123,6 +123,8 @@ struct AppSettings: Codable, Equatable {
     // 通用
     /// 在程序坞显示图标（关掉后只在菜单栏有图标）
     var showInDock = true
+    /// 开始听时把程序坞和菜单栏里的 Tyto 图标藏起来（整屏共享时对方看得到程序坞和菜单栏）
+    var hideIconsWhileListening = false
 
     // 设置窗口
     var iconStyle: IconStyle = .graphite
@@ -248,36 +250,84 @@ final class SettingsStore: ObservableObject {
 }
 
 /// API key 存在钥匙串里，不写进设置文件。
+/// 钥匙串条目只信任创建它的那份 App 的签名：0.4 以前用开发版签名存的 key，正式版去读时系统会弹框问，
+/// 正式版也改不了、删不掉那条旧的（以前改 key 会悄悄存不进去）。所以现在存在新的一条（service 末尾带 .keys），
+/// 旧条目第一次读到就搬过来；在设置里改过或清空过的账户，不再去读旧条目。
 enum Keychain {
-    private static let service = "com.giomni.tyto"
+    private static let service = "com.giomni.tyto.keys"
+    private static let legacyService = "com.giomni.tyto"
+    /// 已经搬过或改过的账户（存在 defaults 里）：不再读旧条目
+    private static let settledDefaultsKey = "keychainSettledAccounts"
+    /// 这次运行里已经去读过旧条目的账户：没读到（你点了拒绝）也不再问，免得一直弹框
+    nonisolated(unsafe) private static var askedLegacy: Set<String> = []
+    private static let lock = NSLock()
 
     static func get(_ account: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
+        if let value = read(service, account) { return value }
+        guard shouldAskLegacy(account), let value = read(legacyService, account) else { return nil }
+        if write(value, service, account) == errSecSuccess { settle(account) }
+        return value
+    }
+
+    /// 存 key（空的就删掉）。返回出错信息，nil 表示存好了
+    @discardableResult
+    static func set(_ value: String, for account: String) -> String? {
+        settle(account)
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let status = trimmed.isEmpty ? delete(service, account) : write(trimmed, service, account)
+        guard status != errSecSuccess, status != errSecItemNotFound else { return nil }
+        let reason = SecCopyErrorMessageString(status, nil) as String? ?? "OSStatus \(status)"
+        RunLog.write("钥匙串存不进 \(account)：\(reason)")
+        return reason
+    }
+
+    private static func query(_ service: String, _ account: String) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword,
+         kSecAttrService as String: service,
+         kSecAttrAccount as String: account]
+    }
+
+    private static func read(_ service: String, _ account: String) -> String? {
+        var request = query(service, account)
+        request[kSecReturnData as String] = true
+        request[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+        guard SecItemCopyMatching(request as CFDictionary, &item) == errSecSuccess,
               let data = item as? Data, let text = String(data: data, encoding: .utf8), !text.isEmpty
         else { return nil }
         return text
     }
 
-    static func set(_ value: String, for account: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        SecItemDelete(query as CFDictionary)
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        var item = query
-        item[kSecValueData as String] = Data(trimmed.utf8)
-        SecItemAdd(item as CFDictionary, nil)
+    /// 有就改、没有就建（不先删：删别的签名建的条目会失败）
+    private static func write(_ value: String, _ service: String, _ account: String) -> OSStatus {
+        let data = Data(value.utf8)
+        let status = SecItemUpdate(query(service, account) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        guard status == errSecItemNotFound else { return status }
+        var item = query(service, account)
+        item[kSecValueData as String] = data
+        return SecItemAdd(item as CFDictionary, nil)
+    }
+
+    private static func delete(_ service: String, _ account: String) -> OSStatus {
+        SecItemDelete(query(service, account) as CFDictionary)
+    }
+
+    private static func shouldAskLegacy(_ account: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        let settled = UserDefaults.standard.stringArray(forKey: settledDefaultsKey) ?? []
+        guard !settled.contains(account), !askedLegacy.contains(account) else { return false }
+        askedLegacy.insert(account)
+        return true
+    }
+
+    private static func settle(_ account: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        var settled = UserDefaults.standard.stringArray(forKey: settledDefaultsKey) ?? []
+        guard !settled.contains(account) else { return }
+        settled.append(account)
+        UserDefaults.standard.set(settled, forKey: settledDefaultsKey)
     }
 }
 

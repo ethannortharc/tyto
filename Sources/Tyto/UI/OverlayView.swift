@@ -81,7 +81,10 @@ struct OverlayView: View {
             .padding(.vertical, 2)
             .background(Capsule().fill(theme.ink.opacity(0.06)))
             .overlay(Capsule().strokeBorder(theme.ink.opacity(0.08), lineWidth: 0.5))
-            IconButton(symbol: "xmark", theme: theme, help: tr("退出 Tyto（⌃⌥Q）", "Quit Tyto (⌃⌥Q)"), size: 24, action: actions.quit)
+            // 只是收起悬浮窗，Tyto 还在菜单栏里；完全退出用菜单栏图标里的「退出」
+            IconButton(symbol: "xmark", theme: theme,
+                       help: tr("收起悬浮窗（⌃⌥T 再打开）；退出在菜单栏图标里", "Hide Overlay (⌃⌥T to show again); quit from the menu bar icon"),
+                       size: 24, action: actions.hide)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -109,6 +112,9 @@ struct OverlayView: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(theme.ink.opacity(0.8))
                 .padding(.leading, 4)
+                .frame(height: 26)
+                // 透明的地方也算点中（不然只有图形那几个像素能点）
+                .contentShape(Rectangle())
         } primaryAction: {
             session.captureAndReply()
         }
@@ -137,10 +143,7 @@ struct OverlayView: View {
                 Button(action: actions.quit) { Label(tr("退出 Tyto ⌃⌥Q", "Quit Tyto ⌃⌥Q"), systemImage: "power") }
             }
         } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(theme.ink.opacity(0.8))
-                .frame(width: 26, height: 26)
+            MenuGlyph(symbol: "ellipsis", theme: theme)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -431,6 +434,25 @@ private struct PanelToggle: View {
     }
 }
 
+/// 下拉菜单的图标：整个圆都能点（Menu 的标签默认只有图形本身那几个像素能点中），悬停时有底色
+struct MenuGlyph: View {
+    let symbol: String
+    let theme: OverlayTheme
+    var size: CGFloat = 28
+
+    @State private var hovered = false
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size * 0.44, weight: .semibold))
+            .foregroundStyle(theme.ink.opacity(hovered ? 1 : 0.8))
+            .frame(width: size, height: size)
+            .background(Circle().fill(theme.ink.opacity(hovered ? 0.10 : 0)))
+            .contentShape(Circle())
+            .onHover { hovered = $0 }
+    }
+}
+
 struct IconButton: View {
     let symbol: String
     var active = false
@@ -448,6 +470,7 @@ struct IconButton: View {
                 .foregroundStyle(active ? theme.accent : theme.ink.opacity(hovered ? 1 : 0.8))
                 .frame(width: size, height: size)
                 .background(Circle().fill(active ? theme.accent.opacity(theme.light ? 0.14 : 0.18) : theme.ink.opacity(hovered ? 0.10 : 0)))
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
@@ -665,7 +688,7 @@ private struct RowView: View {
 }
 
 /// 悬浮窗里的外观小面板：主题、透明度、字号、点击穿透
-private struct AppearancePopover: View {
+struct AppearancePopover: View {
     @ObservedObject var settings: SettingsStore
     @ObservedObject var ui: OverlayState
 

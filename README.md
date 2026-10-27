@@ -27,7 +27,7 @@ A floating meeting assistant for macOS. It turns what people say into live capti
 
 ## What it does
 
-- **Hidden from screen sharing**: the overlay and settings window don't appear when you share your screen in Zoom, Teams, Google Meet or Lark ([how this was verified](docs/share-check.md), in Chinese).
+- **Hidden from screen sharing**: no Tyto window shows up when you share your screen in Zoom, Teams, Google Meet or Lark: overlay, replies panel, prompter, settings, pop-ups and menus ([how this was verified](docs/share-check.md), in Chinese). When you share the whole screen, *Settings → General → Hide Dock and Menu Bar Icons While Listening* hides Tyto's icons too.
 - **Two audio channels**: *remote* is the meeting app's sound (system audio), *local* is your microphone (you and anyone in the room). With cloud recognition, speakers are told apart as Speaker 1, 2, 3 — click a name to rename it "Me" or "Alice".
 - **Original and translation side by side**: pick your main language; lines in other languages get a smaller, fainter translation underneath, toggled with one click. Numbers, dates, amounts, names and your own keywords are highlighted; questions get a tag.
 - **One-click replies**: click a line, select several, or reply to "the latest". Replies use the meeting background and the skills you picked, in three parts: what they mean, what you can say, and a translation of your reply.
@@ -47,7 +47,7 @@ Requires **macOS 26** or later on Apple silicon.
 The app is notarized by Apple, so it opens normally. If you open it from somewhere else, Tyto offers to move itself to Applications.
 
 - **Updates**: Tyto checks GitHub once a day, downloads new versions in the background, and installs them the next time you quit, never mid-meeting. *Settings → General* turns this off or checks now; it's also under the Tyto menu → *Check for Updates…*. Every update is verified with Tyto's signing key before it's installed.
-- **Always there**: Tyto has a Dock icon and a menu bar icon (the ear). Closing the settings window or minimizing it keeps Tyto running with the overlay and shortcuts; quit with ⌘Q. *Settings → General* can open Tyto at login, or hide the Dock icon to keep only the menu bar icon.
+- **Always there**: Tyto has a Dock icon and a menu bar icon (the ear). Closing the settings window, minimizing it, or the × on the overlay keeps Tyto running with its shortcuts; quit from the menu bar icon (or ⌘Q). Clicking the Dock icon brings a hidden overlay back. *Settings → General* can open Tyto at login, or hide the Dock icon to keep only the menu bar icon.
 
 ## First run
 
@@ -215,6 +215,7 @@ Check each part without a meeting (arguments to `build/Tyto.app/Contents/MacOS/T
 | `--selftest-glass <dir> [--light] [--auto]` | Real glass rendering (captures only Tyto's own windows); `--light` over a white page, `--auto` with the automatic text color |
 | `--selftest-backdrop` | Auto text color: measure a white page and a meeting backdrop, check white vs. black |
 | `--selftest-followup` | *What you said* after a suggested reply: which lines, followed / rephrased / no reply; which side the replies panel goes |
+| `--selftest-sharing [folder]` | Screen sharing: puts the overlay, replies panel, prompter, a popover and an open menu on screen, captures the whole display like a meeting app, and checks none of them appear (plus a control that must appear) |
 | `--selftest-prompter [folder]` | Prompter in a real window: outline, Follow, hints (English and Chinese notes), other people's HTML colors, reload on edit; with a folder, screenshots too |
 
 Add `--settings-json '{...}'` to any of them to override settings without saving. The run log is at `~/Library/Logs/Tyto.log`.
@@ -239,7 +240,7 @@ Sources/ShareCheck/   screen-share check app
 ## Known limitations
 
 - Remote audio is every app's sound except Tyto's — don't play music or videos during a meeting.
-- Pull-down menus on the overlay are drawn by the system and may show briefly in a screen share while open.
+- Things macOS draws for Tyto can show in a screen share: the file chooser when opening prompter notes, permission and Keychain prompts, and Tyto's menus at the top of the screen while Tyto is the active app. Tyto's own windows, pop-ups and pull-down menus don't (`--selftest-sharing` checks this).
 - Soniox, AssemblyAI, ElevenLabs and Deepgram follow their published protocols and pass against local mock servers, but haven't run through long real meetings yet.
 - Hiding during a Google Meet share in Chrome hasn't been tested directly (Chrome uses the same ScreenCaptureKit path, which has been).
 

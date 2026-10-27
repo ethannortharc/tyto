@@ -45,7 +45,9 @@ struct Provider: Codable, Identifiable, Equatable, Sendable {
             ?? ProcessInfo.processInfo.environment["TYTO_LLM_API_KEY"]
     }
 
-    func setKey(_ value: String) { Keychain.set(value, for: "provider.\(id)") }
+    /// 返回出错信息，nil 表示存好了
+    @discardableResult
+    func setKey(_ value: String) -> String? { Keychain.set(value, for: "provider.\(id)") }
 }
 
 /// 能做什么

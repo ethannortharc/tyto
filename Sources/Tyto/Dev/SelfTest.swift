@@ -123,6 +123,12 @@ enum SelfTest {
             print(HTMLFormatter.format((try? String(contentsOfFile: file, encoding: .utf8)) ?? ""))
             exit(0)
         }
+        // --selftest-sharing [截图文件夹]：共享屏幕时 Tyto 的窗口、弹出框、菜单会不会被截到（会在屏幕上闪几秒）
+        if arguments.contains("--selftest-sharing") {
+            let folder = value(after: "--selftest-sharing").flatMap { $0.hasPrefix("--") ? nil : $0 }
+            Task { exit(await sharing(to: folder)) }
+            return true
+        }
         // --selftest-prompter [截图文件夹]：提词器（会在屏幕上开一个窗口几秒）
         if arguments.contains("--selftest-prompter") {
             let folder = value(after: "--selftest-prompter").flatMap { $0.hasPrefix("--") ? nil : $0 }

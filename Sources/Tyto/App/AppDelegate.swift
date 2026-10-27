@@ -25,11 +25,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     /// 会话载入了没有。没载入就退出（自测、移到「应用程序」后重开）时不存会话，免得把真实记录盖成空的
     private var sessionLoaded = false
     private var subscriptions: Set<AnyCancellable> = []
-    private var sweepTask: Task<Void, Never>?
     private var optionTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if SelfTest.runIfRequested(settings: settings) { return }
+        SharingGuard.install()
         // 从下载文件夹、磁盘映像里打开的：先问要不要移到「应用程序」（移了就从那里重开，这一份直接退出）
         Installer.offerMoveToApplications()
 
@@ -60,9 +60,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
         setupStatusItem()
         registerHotKeys()
-        hideAllWindowsFromSharing()
+        updateIconsWhileListening()
         settings.$value.map(\.showInDock).removeDuplicates().dropFirst()
-            .sink { [weak self] _ in DispatchQueue.main.async { self?.applyDockPolicy() } }
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.applyDockPolicy(refocus: true) } }
             .store(in: &subscriptions)
         settings.$value.map(\.language).removeDuplicates().dropFirst()
             .sink { [weak self] _ in DispatchQueue.main.async { self?.setupMainMenu() } }
@@ -76,9 +76,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if CommandLine.arguments.contains("--start") { session.toggle() }
     }
 
-    /// 点程序坞图标：设置窗口没开（或缩到程序坞里了）就打开它
+    /// 点程序坞图标（或再次打开 Tyto）：悬浮窗收起来了就把它放回来，否则打开设置窗口
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if mainWindow?.isVisible != true || mainWindow?.isMiniaturized == true { openMainWindow() }
+        if overlay?.isVisible == false {
+            toggleOverlay()
+        } else if mainWindow?.isVisible != true || mainWindow?.isMiniaturized == true {
+            openMainWindow()
+        }
         return true
     }
 
@@ -95,13 +99,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         return menu
     }
 
+    /// 正在听、且设了听的时候藏图标
+    private var iconsHidden: Bool { session.isRunning && settings.value.hideIconsWhileListening }
+
     /// 在程序坞显示图标（普通 App），或者只在菜单栏（关掉程序坞图标时）
-    private func applyDockPolicy() {
-        let policy: NSApplication.ActivationPolicy = settings.value.showInDock ? .regular : .accessory
+    /// - refocus: 在设置窗口里拨开关时为 true，把被系统藏到后面的设置窗口拉回来；开始听时自动藏图标不抢会议软件的焦点
+    private func applyDockPolicy(refocus: Bool = false) {
+        let policy: NSApplication.ActivationPolicy = settings.value.showInDock && !iconsHidden ? .regular : .accessory
         guard NSApp.activationPolicy() != policy else { return }
         NSApp.setActivationPolicy(policy)
         // 从程序坞模式换到只在菜单栏时，系统会把设置窗口藏到后面，拉回来
-        if mainWindow?.isVisible == true {
+        if refocus, mainWindow?.isVisible == true {
             DispatchQueue.main.async {
                 NSApp.activate()
                 self.mainWindow?.makeKeyAndOrderFront(nil)
@@ -265,14 +273,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         }
     }
 
-    /// 弹出来的小窗口（改名字的气泡等）是另建的窗口，不会自动继承"不被共享"；定时把本 app 所有窗口都设上。
-    private func hideAllWindowsFromSharing() {
-        sweepTask = Task {
-            while !Task.isCancelled {
-                for window in NSApp.windows where window.sharingType != .none { window.sharingType = .none }
-                try? await Task.sleep(for: .milliseconds(300))
+    /// 「开始听时隐藏程序坞和菜单栏图标」：整屏共享时对方能看到程序坞和菜单栏，听的时候把 Tyto 的两个图标都藏起来
+    private func updateIconsWhileListening() {
+        Publishers.CombineLatest(session.$isRunning, settings.$value.map(\.hideIconsWhileListening))
+            .map { $0 && $1 }
+            .removeDuplicates()
+            .sink { [weak self] hide in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.statusItem?.isVisible = !hide
+                    self.applyDockPolicy()
+                }
             }
-        }
+            .store(in: &subscriptions)
     }
 
     // MARK: - 菜单栏
