@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 app="build/TytoShareCheck.app/Contents/MacOS/ShareCheck"
 data="$HOME/Library/Application Support/Tyto/share-check"
-[ -x "$app" ] || scripts/build-app.sh >/dev/null
+[ -x "$app" ] || scripts/build-app.sh ShareCheck >/dev/null
 
 work="$(mktemp -d)"
 cleanup() {

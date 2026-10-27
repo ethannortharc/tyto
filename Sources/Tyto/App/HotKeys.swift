@@ -1,0 +1,40 @@
+import Carbon.HIToolbox
+import Foundation
+
+/// 全局快捷键（会议软件在前台时也能用）。用 Carbon 的热键接口，不需要辅助功能权限。
+@MainActor
+final class HotKeys {
+    private var handlers: [UInt32: () -> Void] = [:]
+    private var references: [EventHotKeyRef] = []
+    private var installed = false
+
+    /// - keyCode: 如 kVK_ANSI_T
+    /// - modifiers: 如 optionKey | cmdKey
+    func register(keyCode: Int, modifiers: Int, _ handler: @escaping () -> Void) {
+        installIfNeeded()
+        let id = UInt32(handlers.count + 1)
+        handlers[id] = handler
+        var reference: EventHotKeyRef?
+        let hotKeyID = EventHotKeyID(signature: OSType(0x5459_544F), id: id) // "TYTO"
+        let status = RegisterEventHotKey(UInt32(keyCode), UInt32(modifiers), hotKeyID,
+                                         GetApplicationEventTarget(), 0, &reference)
+        if status == noErr, let reference { references.append(reference) }
+    }
+
+    private func installIfNeeded() {
+        guard !installed else { return }
+        installed = true
+        var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        let me = Unmanaged.passUnretained(self).toOpaque()
+        InstallEventHandler(GetApplicationEventTarget(), { _, event, userData in
+            guard let event, let userData else { return OSStatus(eventNotHandledErr) }
+            var hotKeyID = EventHotKeyID()
+            GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                              nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyID)
+            let id = hotKeyID.id
+            let hotKeys = Unmanaged<HotKeys>.fromOpaque(userData).takeUnretainedValue()
+            MainActor.assumeIsolated { hotKeys.handlers[id]?() }
+            return noErr
+        }, 1, &eventType, me, nil)
+    }
+}

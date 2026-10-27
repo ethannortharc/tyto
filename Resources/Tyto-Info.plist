@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.giomni.tyto</string>
+	<key>CFBundleName</key>
+	<string>Tyto</string>
+	<key>CFBundleDisplayName</key>
+	<string>Tyto 听译</string>
+	<key>CFBundleExecutable</key>
+	<string>Tyto</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Tyto 用麦克风听会议室里的说话声（包括你自己），转成文字。</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Tyto 录制系统声音，把会议软件里对方说的话转成文字。</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Tyto 在本机把语音转成文字。</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- 允许连本机的 http 服务（Ollama、LM Studio） -->
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Ethan H.B. Zhou</string>
+</dict>
+</plist>

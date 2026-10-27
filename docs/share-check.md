@@ -7,7 +7,7 @@
 ## 编译和启动
 
 ```bash
-scripts/build-app.sh
+scripts/build-app.sh ShareCheck
 open build/TytoShareCheck.app
 ```
 
