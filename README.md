@@ -6,6 +6,13 @@ Tyto 是仓鸮属的拉丁名——仓鸮在黑暗里只靠听声音就能定位
 
 ## 现状
 
-第一步：验证"共享屏幕时悬浮窗不被看见"在 Zoom、Teams、Google Meet 上是否成立。见 `docs/share-check.md`。
+第一步：验证"共享屏幕时悬浮窗不被看见"在 Zoom、Teams、Google Meet 上是否成立。
+
+```bash
+scripts/build-app.sh            # 编译验证程序，得到 build/TytoShareCheck.app
+open build/TytoShareCheck.app
+```
+
+测试步骤和结果记录见 `docs/share-check.md`。
 
 © 2026 Ethan H.B. Zhou
