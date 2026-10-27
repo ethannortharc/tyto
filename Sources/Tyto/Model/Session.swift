@@ -79,7 +79,8 @@ final class SessionModel: ObservableObject {
             return
         }
 
-        RunLog.write("开始听：\(channels.map(\.label).joined(separator: "、"))，识别 \(current.speechProvider.rawValue)")
+        RunLog.write("开始听：\(channels.map(\.label).joined(separator: "、"))，识别 \(current.speechMethod.title)"
+                     + (current.speechMethod == .apple ? "" : "（\(current.speechSlot.providerID) / \(current.speechSlot.model)）"))
         // 两路各开各的：一路在等权限框时，另一路照样能先开起来
         await withTaskGroup(of: Void.self) { group in
             for channel in channels {
@@ -160,15 +161,7 @@ final class SessionModel: ObservableObject {
     }
 
     private func makeEngine(for channel: Channel, settings: AppSettings) throws -> SpeechEngine {
-        switch settings.speechProvider {
-        case .apple:
-            return AppleSpeechEngine(locale: channel == .remote ? settings.remoteLocale : settings.localLocale)
-        case .soniox:
-            guard let key = Keychain.get("soniox") else { throw TytoError.missingAPIKey("Soniox") }
-            let hints = settings.sonioxLanguageHints.split(separator: ",")
-                .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-            return SonioxSpeechEngine(apiKey: key, model: settings.sonioxModel, languageHints: hints)
-        }
+        try SpeechEngines.make(for: channel, settings: settings)
     }
 
     private func startTicking() {
@@ -365,8 +358,7 @@ final class SessionModel: ObservableObject {
         case .apple:
             return appleTranslator
         case .llm:
-            let model = current.translationModel.trimmingCharacters(in: .whitespaces)
-            return LLMTranslator(client: try LLMFactory.make(current.llm, model: model.isEmpty ? nil : model))
+            return LLMTranslator(client: try LLMFactory.make(current.effectiveTranslationSlot, for: "翻译", in: current))
         }
     }
 
@@ -377,7 +369,7 @@ final class SessionModel: ObservableObject {
         let current = settings.value
         let client: LLMClient
         do {
-            client = try LLMFactory.make(current.llm)
+            client = try LLMFactory.make(current.replySlot, for: "回复", in: current)
         } catch {
             notice = error.localizedDescription
             return
@@ -480,8 +472,9 @@ final class SessionModel: ObservableObject {
         let client: LLMClient
         let visionClient: LLMClient?
         do {
-            client = try LLMFactory.make(current.llm)
-            visionClient = current.screenshotMode == .visionModel ? try LLMFactory.make(current.vision) : nil
+            client = try LLMFactory.make(current.replySlot, for: "回复", in: current)
+            visionClient = current.screenshotMode == .visionModel
+                ? try LLMFactory.make(current.visionSlot, for: "看图", in: current) : nil
         } catch {
             notice = error.localizedDescription
             return
@@ -729,8 +722,8 @@ enum ScreenshotReplier {
 
         // 先用看图模型把截图整理成文字（看图模型是本机的，图片就不出这台 Mac）
         if let visionClient {
-            status("看图模型读截图（\(current.vision.model)）…")
-            let prompt = VisionPrompt(model: current.vision.model, source: image.source)
+            status("看图模型读截图（\(current.visionSlot.model)）…")
+            let prompt = VisionPrompt(model: current.visionSlot.model, source: image.source)
             let reading = try await visionClient.complete(system: prompt.system, user: prompt.user,
                                                           images: [Screenshot.forModel(image.png)], maxTokens: 4_000)
             ocr = "看图模型整理的内容：\n\(reading)\n\n本机 OCR 的原文（核对用）：\n\(ocr)"

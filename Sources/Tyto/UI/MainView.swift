@@ -40,6 +40,8 @@ struct MainView: View {
             .frame(minWidth: 560)
         }
         .frame(minWidth: 820, minHeight: 620)
+        // 和系统设置一样用滑动开关
+        .toggleStyle(.switch)
     }
 
     @ViewBuilder
@@ -47,11 +49,10 @@ struct MainView: View {
         switch current {
         case .session: SessionPage(session: session, skills: skills, page: $page)
         case .skills: SkillsPage(skills: skills)
-        case .audio: AudioPage(settings: settings)
-        case .speech: SpeechPage(settings: settings)
+        case .listen: ListenPage(settings: settings)
         case .translation: TranslationPage(settings: settings, session: session)
-        case .models: ModelsPage(settings: settings)
-        case .screenshot: ScreenshotPage(settings: settings, page: $page)
+        case .screenshot: ScreenshotPage(settings: settings)
+        case .services: ServicesPage(settings: settings)
         case .appearance: AppearancePage(settings: settings)
         case .shortcuts: ShortcutsPage()
         case .permissions: PermissionsPage()
@@ -60,7 +61,7 @@ struct MainView: View {
 }
 
 enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
-    case session, skills, audio, speech, translation, models, screenshot, appearance, shortcuts, permissions
+    case session, skills, listen, translation, screenshot, services, appearance, shortcuts, permissions
 
     var id: String { rawValue }
 
@@ -68,11 +69,10 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .session: "会话"
         case .skills: "技能"
-        case .audio: "声音来源"
-        case .speech: "语音识别"
+        case .listen: "听写"
         case .translation: "翻译"
-        case .models: "模型"
         case .screenshot: "截屏回复"
+        case .services: "模型与服务"
         case .appearance: "外观"
         case .shortcuts: "快捷键"
         case .permissions: "权限与关于"
@@ -83,11 +83,10 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .session: "这场会议的背景、关键词、技能和说话人。回复时都会带上。"
         case .skills: "写给大模型的做法说明，决定回复的语气和套路。"
-        case .audio: "远端是会议软件里的声音，本地是麦克风收到的声音。"
-        case .speech: "把声音变成文字。本机免费不联网，云端能分出说话人。"
+        case .listen: "听哪些声音，怎么把声音变成文字。"
         case .translation: "每句话下面显示译文，悬浮窗顶部一键开关。"
-        case .models: "回复用的模型和看图用的模型，填服务商、地址，选模型。"
         case .screenshot: "截下最前面的 App 或整个屏幕，读懂内容，写好能直接粘贴的回复。"
+        case .services: "服务商只配一次，回复、看图、翻译、语音识别都从这里选。"
         case .appearance: "主题、透明度和字号。下面是实时预览。"
         case .shortcuts: "会议软件在前台时也能用。"
         case .permissions: "Tyto 用到的系统权限，以及数据放在哪。"
@@ -98,11 +97,10 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .session: "person.2.wave.2.fill"
         case .skills: "wand.and.sparkles"
-        case .audio: "waveform"
-        case .speech: "text.bubble.fill"
+        case .listen: "waveform"
         case .translation: "character.bubble.fill"
-        case .models: "cpu.fill"
         case .screenshot: "camera.viewfinder"
+        case .services: "square.stack.3d.up.fill"
         case .appearance: "paintpalette.fill"
         case .shortcuts: "command"
         case .permissions: "lock.shield.fill"
@@ -113,11 +111,10 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .session: [Color(red: 0.30, green: 0.62, blue: 1.0), Color(red: 0.16, green: 0.40, blue: 0.95)]
         case .skills: [Color(red: 0.78, green: 0.50, blue: 1.0), Color(red: 0.55, green: 0.30, blue: 0.95)]
-        case .audio: [Color(red: 1.0, green: 0.42, blue: 0.55), Color(red: 0.92, green: 0.22, blue: 0.40)]
-        case .speech: [Color(red: 1.0, green: 0.66, blue: 0.30), Color(red: 0.96, green: 0.45, blue: 0.16)]
+        case .listen: [Color(red: 1.0, green: 0.42, blue: 0.55), Color(red: 0.92, green: 0.22, blue: 0.40)]
         case .translation: [Color(red: 0.32, green: 0.85, blue: 0.55), Color(red: 0.14, green: 0.66, blue: 0.40)]
-        case .models: [Color(red: 0.45, green: 0.50, blue: 1.0), Color(red: 0.30, green: 0.30, blue: 0.85)]
         case .screenshot: [Color(red: 0.25, green: 0.82, blue: 0.85), Color(red: 0.10, green: 0.58, blue: 0.72)]
+        case .services: [Color(red: 0.45, green: 0.50, blue: 1.0), Color(red: 0.30, green: 0.30, blue: 0.85)]
         case .appearance: [Color(red: 1.0, green: 0.55, blue: 0.75), Color(red: 0.85, green: 0.35, blue: 0.80)]
         case .shortcuts: [Color(red: 0.62, green: 0.64, blue: 0.70), Color(red: 0.42, green: 0.44, blue: 0.50)]
         case .permissions: [Color(red: 0.40, green: 0.75, blue: 1.0), Color(red: 0.25, green: 0.55, blue: 0.90)]
@@ -126,9 +123,8 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
 
     static let groups: [(title: String, pages: [SettingsPage])] = [
         ("会议", [.session, .skills]),
-        ("听", [.audio, .speech, .translation]),
-        ("回复", [.models, .screenshot]),
-        ("其他", [.appearance, .shortcuts, .permissions]),
+        ("功能", [.listen, .translation, .screenshot]),
+        ("设置", [.services, .appearance, .shortcuts, .permissions]),
     ]
 }
 
@@ -456,9 +452,9 @@ private struct SkillsPage: View {
     }
 }
 
-// MARK: - 声音来源
+// MARK: - 听写（声音来源 + 语音识别）
 
-private struct AudioPage: View {
+private struct ListenPage: View {
     @ObservedObject var settings: SettingsStore
     @State private var inputDevices: [InputDevice] = []
 
@@ -471,11 +467,7 @@ private struct AudioPage: View {
                 Row(symbol: "mic.fill", tint: .green, title: "本地", detail: "麦克风收到的声音：你和会议室里的人") {
                     Toggle("", isOn: $settings.value.captureLocal).labelsHidden()
                 }
-            } header: {
-                Text("听哪些声音")
-            }
-            Section {
-                Row(symbol: "mic.badge.plus", tint: .green, title: "麦克风") {
+                Row(symbol: "mic.badge.plus", tint: .green, title: "麦克风", detail: "自动：跟系统默认走，跳过 BlackHole 这类虚拟声卡") {
                     Picker("", selection: $settings.value.localInputDeviceUID) {
                         Text("自动").tag("")
                         ForEach(inputDevices) { device in
@@ -483,17 +475,27 @@ private struct AudioPage: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(maxWidth: 260)
+                    .frame(maxWidth: 240)
                 }
-                Row(symbol: "ear.and.waveform", tint: .orange, title: "去掉回声",
-                    detail: "外放开会时，麦克风收到的对方声音不重复显示") {
+                Row(symbol: "ear.and.waveform", tint: .orange, title: "去掉回声", detail: "外放开会时，麦克风收到的对方声音不重复显示") {
                     Toggle("", isOn: $settings.value.echoCancellation).labelsHidden()
                 }
             } header: {
-                Text("本地")
+                Text("听哪些声音")
+            }
+
+            Section {
+                SpeechMethodCards(settings: settings)
+            } header: {
+                Text("怎么把声音变成文字")
+            }
+
+            Section {
+                SpeechDetails(settings: settings)
+            } header: {
+                Text(settings.value.speechMethod == .apple ? "语言" : "服务")
             } footer: {
-                Text("自动：跟系统默认的输入设备走，但会跳过 BlackHole 这类虚拟声卡。改了以后停止再开始听才生效。")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text("改了以后停止再开始听才生效。").font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -501,52 +503,321 @@ private struct AudioPage: View {
     }
 }
 
-// MARK: - 语音识别
-
-private struct SpeechPage: View {
+private struct SpeechMethodCards: View {
     @ObservedObject var settings: SettingsStore
-    @State private var sonioxKey = Keychain.get("soniox") ?? ""
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            ForEach(SpeechMethod.allCases) { method in
+                OptionCard(symbol: method.symbol, title: method.title, detail: method.detail,
+                           selected: settings.value.speechMethod == method) { choose(method) }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// 换方式时，如果原来选的服务商干不了这个，自动换成第一个能干的
+    private func choose(_ method: SpeechMethod) {
+        settings.value.speechMethod = method
+        guard let capability = method.capability else { return }
+        let usable = settings.value.providers(for: capability)
+        if !usable.contains(where: { $0.id == settings.value.speechSlot.providerID }), let first = usable.first {
+            settings.value.speechSlot = ModelSlot(providerID: first.id, model: first.info.suggested[capability]?.first ?? "")
+        }
+    }
+}
+
+/// 语音识别的细节：本机选语言；云端选服务商、模型和可能出现的语言
+private struct SpeechDetails: View {
+    @ObservedObject var settings: SettingsStore
+
+    var body: some View {
+        if let capability = settings.value.speechMethod.capability {
+            Row(symbol: "server.rack", tint: .indigo, title: "服务商和模型") {
+                ModelPicker(settings: settings, slot: $settings.value.speechSlot, capability: capability)
+            }
+            Row(symbol: "globe", tint: .blue, title: "可能出现的语言", detail: "逗号分隔，如 en,zh；只填一种识别更准") {
+                TextField("", text: $settings.value.speechLanguageHints).frame(maxWidth: 200)
+            }
+        } else {
+            Row(symbol: "person.wave.2.fill", tint: .blue, title: "远端说的语言") {
+                LanguageField(code: $settings.value.remoteLocale, choices: Languages.speechChoices)
+            }
+            Row(symbol: "mic.fill", tint: .green, title: "本地说的语言") {
+                LanguageField(code: $settings.value.localLocale, choices: Languages.speechChoices)
+            }
+        }
+    }
+}
+
+// MARK: - 模型与服务
+
+private struct ServicesPage: View {
+    @ObservedObject var settings: SettingsStore
+    @State private var expanded: String?
 
     var body: some View {
         Form {
             Section {
-                OptionCard(symbol: "apple.logo", title: "Apple 本机识别",
-                           detail: "免费、不联网、隐私最好。一路只认一种语言，不区分说话人。",
-                           selected: settings.value.speechProvider == .apple) { settings.value.speechProvider = .apple }
-                OptionCard(symbol: "cloud.fill", title: "Soniox 云端识别",
-                           detail: "能分出说话人 1、2、3，多种语言混着说也能认。约 $0.12 / 小时。",
-                           selected: settings.value.speechProvider == .soniox) { settings.value.speechProvider = .soniox }
+                ForEach($settings.value.providers) { $provider in
+                    ProviderRow(provider: $provider, expanded: expanded == provider.id,
+                                toggle: { expanded = expanded == provider.id ? nil : provider.id },
+                                remove: { remove(provider.id) })
+                }
+                if settings.value.providers.isEmpty {
+                    Label("还没有服务商，点右上角「添加」", systemImage: "tray").foregroundStyle(.secondary)
+                }
             } header: {
-                Text("识别服务")
+                HStack {
+                    Text("服务商")
+                    Spacer()
+                    AddProviderMenu { add($0) }
+                }
+            } footer: {
+                Text("每个服务商只要配一次（地址、key），下面各个用途从里面选。key 存在钥匙串里。").font(.caption).foregroundStyle(.secondary)
             }
+
             Section {
-                switch settings.value.speechProvider {
-                case .apple:
-                    Row(symbol: "person.wave.2.fill", tint: .blue, title: "远端说的语言") {
-                        LanguageField(code: $settings.value.remoteLocale, choices: Languages.speechChoices)
+                Row(symbol: "text.bubble.fill", tint: .blue, title: "回复", detail: "会议回复、截屏回复") {
+                    VStack(alignment: .trailing, spacing: 6) {
+                        ModelPicker(settings: settings, slot: $settings.value.replySlot, capability: .chat)
+                        Picker("", selection: $settings.value.replySlot.effort) {
+                            Text("思考：低").tag("low")
+                            Text("中").tag("medium")
+                            Text("高").tag("high")
+                            Text("不传").tag("")
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(maxWidth: 300)
                     }
-                    Row(symbol: "mic.fill", tint: .green, title: "本地说的语言") {
-                        LanguageField(code: $settings.value.localLocale, choices: Languages.speechChoices)
-                    }
-                case .soniox:
-                    Row(symbol: "key.fill", tint: .orange, title: "API key") {
-                        SecureField("", text: $sonioxKey).frame(maxWidth: 280)
-                            .onChange(of: sonioxKey) { Keychain.set(sonioxKey, for: "soniox") }
-                    }
-                    Row(symbol: "globe", tint: .blue, title: "可能出现的语言", detail: "逗号分隔，如 en,zh") {
-                        TextField("", text: $settings.value.sonioxLanguageHints).frame(maxWidth: 200)
-                    }
-                    Row(symbol: "cube", tint: .indigo, title: "模型") {
-                        TextField("", text: $settings.value.sonioxModel).frame(maxWidth: 200)
+                }
+                Row(symbol: "eye.fill", tint: .teal, title: "看图", detail: "截屏回复选「先用看图模型读图」时用") {
+                    ModelPicker(settings: settings, slot: $settings.value.visionSlot, capability: .vision)
+                }
+                Row(symbol: "character.bubble.fill", tint: .green, title: "翻译", detail: "翻译方式选「大模型翻译」时用") {
+                    ModelPicker(settings: settings, slot: $settings.value.translationSlot, capability: .chat, sameAsReply: true)
+                }
+                Row(symbol: "waveform", tint: .pink, title: "语音识别", detail: settings.value.speechMethod.title) {
+                    VStack(alignment: .trailing, spacing: 6) {
+                        Picker("", selection: $settings.value.speechMethod) {
+                            ForEach(SpeechMethod.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: 200)
+                        if let capability = settings.value.speechMethod.capability {
+                            ModelPicker(settings: settings, slot: $settings.value.speechSlot, capability: capability)
+                        }
                     }
                 }
             } header: {
-                Text("设置")
+                Text("各个用途")
             } footer: {
-                Text("改了以后停止再开始听才生效。").font(.caption).foregroundStyle(.secondary)
+                Text("每一行左边选服务商，右边选模型；点 ⌄ 从服务商读模型列表，也可以直接输入。").font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func add(_ template: ProviderTemplate) {
+        var id = template.id
+        var number = 2
+        while settings.value.providers.contains(where: { $0.id == id }) {
+            id = "\(template.id)-\(number)"
+            number += 1
+        }
+        let name = id == template.id ? template.name : "\(template.name) \(number - 1)"
+        settings.value.providers.append(Provider(id: id, name: name, kind: template.kind, baseURL: template.baseURL,
+                                                 template: template.id))
+        expanded = id
+    }
+
+    private func remove(_ id: String) {
+        settings.value.providers.removeAll { $0.id == id }
+        Keychain.set("", for: "provider.\(id)")
+    }
+}
+
+/// 添加服务商：从模板里选
+private struct AddProviderMenu: View {
+    let add: (ProviderTemplate) -> Void
+
+    var body: some View {
+        Menu {
+            Section("大模型") {
+                ForEach(["anthropic", "openai", "openrouter", "gemini", "deepseek", "dashscope", "siliconflow", "groq"], id: \.self) { item($0) }
+            }
+            Section("本机") { ForEach(["ollama", "lmstudio"], id: \.self) { item($0) } }
+            Section("语音识别") { ForEach(["soniox", "deepgram"], id: \.self) { item($0) } }
+            Section { item("custom") }
+        } label: {
+            Label("添加", systemImage: "plus.circle.fill")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private func item(_ id: String) -> some View {
+        if let template = ProviderTemplate.find(id) {
+            Button { add(template) } label: { Label(template.name, systemImage: template.symbol) }
+        }
+    }
+}
+
+/// 一个服务商：收起时一行，展开后改名字、地址、key，测连通
+private struct ProviderRow: View {
+    @Binding var provider: Provider
+    let expanded: Bool
+    let toggle: () -> Void
+    let remove: () -> Void
+
+    @State private var key = ""
+    @State private var test: String?
+    @State private var testing = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button(action: toggle) {
+                HStack(spacing: 12) {
+                    IconTile(symbol: provider.info.symbol, colors: provider.info.colors, size: 30)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(provider.name).font(.system(size: 13, weight: .semibold))
+                        Text(provider.info.note).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer()
+                    if !provider.needsKey {
+                        StatusPill(text: "本机", color: .blue, symbol: "desktopcomputer")
+                    } else if provider.key != nil {
+                        StatusPill(text: "已填 key", color: .green, symbol: "checkmark")
+                    } else {
+                        StatusPill(text: "缺 key", color: .orange, symbol: "key")
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                VStack(spacing: 8) {
+                    Row(symbol: "tag", tint: .gray, title: "名字") {
+                        TextField("", text: $provider.name).frame(maxWidth: 280)
+                    }
+                    Row(symbol: "link", tint: .blue, title: "接口地址") {
+                        TextField("", text: $provider.baseURL, prompt: Text(provider.info.baseURL)).frame(maxWidth: 280)
+                    }
+                    if provider.needsKey {
+                        Row(symbol: "key.fill", tint: .orange, title: "API key") {
+                            HStack(spacing: 6) {
+                                SecureField("", text: $key).frame(maxWidth: 220)
+                                    .onChange(of: key) { provider.setKey(key) }
+                                if let page = provider.info.keyPage, let url = URL(string: page) {
+                                    Link(destination: url) { Image(systemName: "arrow.up.right.square") }.help("去拿 key")
+                                }
+                            }
+                        }
+                    }
+                    HStack(spacing: 10) {
+                        Button(role: .destructive, action: remove) { Label("删除", systemImage: "trash") }
+                        Spacer()
+                        if testing { ProgressView().controlSize(.small) }
+                        if let test { Text(test).font(.caption).foregroundStyle(.secondary).lineLimit(2).textSelection(.enabled) }
+                        Button(action: runTest) { Label("测试连接", systemImage: "bolt.horizontal.circle") }.disabled(testing)
+                    }
+                }
+                .padding(.leading, 42)
+            }
+        }
+        .padding(.vertical, 2)
+        .onAppear { key = Keychain.get("provider.\(provider.id)") ?? "" }
+    }
+
+    private func runTest() {
+        testing = true
+        test = nil
+        let provider = provider
+        Task {
+            defer { testing = false }
+            if provider.kind == .soniox || provider.kind == .deepgram {
+                test = provider.key == nil ? "还没填 key" : "key 已保存，开始听时连接"
+                return
+            }
+            do {
+                let models = try await ModelList.fetch(provider)
+                test = "通了，有 \(models.count) 个模型"
+            } catch {
+                test = error.localizedDescription
+            }
+        }
+    }
+}
+
+/// 选模型：左边选服务商（只列能干这件事的），右边填或选模型
+struct ModelPicker: View {
+    @ObservedObject var settings: SettingsStore
+    @Binding var slot: ModelSlot
+    let capability: Capability
+    /// 翻译可以选"跟回复一样"
+    var sameAsReply = false
+
+    @State private var fetched: [String] = []
+    @State private var loading = false
+
+    private var usable: [Provider] { settings.value.providers(for: capability) }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            // 这里要写成闭包：直接传方法（set: chooseProvider）会让 Swift 6.2 编译器在生成代码时崩溃
+            Picker("", selection: Binding(get: { slot.providerID }, set: { chooseProvider($0) })) {
+                if sameAsReply { Text("跟回复一样").tag("") }
+                if !sameAsReply && !usable.contains(where: { $0.id == slot.providerID }) {
+                    Text(slot.providerID.isEmpty ? "选服务商" : "（已删除）").tag(slot.providerID)
+                }
+                ForEach(usable) { provider in
+                    Label(provider.name, systemImage: provider.info.symbol).tag(provider.id)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 150)
+            if !slot.providerID.isEmpty {
+                TextField("", text: $slot.model, prompt: Text("模型")).frame(width: 170)
+                Menu {
+                    ForEach(choices, id: \.self) { model in Button(model) { slot.model = model } }
+                    Divider()
+                    Button(loading ? "读取中…" : "从服务商读取列表", action: load).disabled(loading)
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("推荐的模型，或者从服务商读取")
+            }
+        }
+    }
+
+    private var choices: [String] {
+        let suggested = settings.value.provider(slot.providerID)?.info.suggested[capability] ?? []
+        return suggested + fetched.filter { !suggested.contains($0) }
+    }
+
+    private func chooseProvider(_ id: String) {
+        guard id != slot.providerID else { return }
+        slot.providerID = id
+        fetched = []
+        slot.model = settings.value.provider(id)?.info.suggested[capability]?.first ?? ""
+    }
+
+    private func load() {
+        guard let provider = settings.value.provider(slot.providerID) else { return }
+        loading = true
+        Task {
+            defer { loading = false }
+            fetched = (try? await ModelList.fetch(provider)) ?? []
+        }
     }
 }
 
@@ -598,7 +869,7 @@ private struct TranslationPage: View {
             Section {
                 OptionCard(symbol: "apple.logo", title: "Apple 本机翻译", detail: "免费、不联网、快。第一次要下载语言包。",
                            selected: settings.value.translationProvider == .apple) { settings.value.translationProvider = .apple }
-                OptionCard(symbol: "sparkles", title: "大模型翻译", detail: "更懂上下文和术语。用「模型」里回复用的模型，也可以单独指定。",
+                OptionCard(symbol: "sparkles", title: "大模型翻译", detail: "更懂上下文和术语。默认用回复的模型，也可以单独选。",
                            selected: settings.value.translationProvider == .llm) { settings.value.translationProvider = .llm }
             } header: {
                 Text("翻译方式")
@@ -610,8 +881,8 @@ private struct TranslationPage: View {
                         TranslationDownload(source: settings.value.localLocale, target: settings.value.targetLanguage)
                     }
                 } else {
-                    Row(symbol: "cube", tint: .indigo, title: "翻译用的模型", detail: "留空和回复用同一个") {
-                        TextField("", text: $settings.value.translationModel).frame(maxWidth: 220)
+                    Row(symbol: "server.rack", tint: .indigo, title: "翻译用的模型") {
+                        ModelPicker(settings: settings, slot: $settings.value.translationSlot, capability: .chat, sameAsReply: true)
                     }
                 }
             } header: {
@@ -662,193 +933,10 @@ private struct TranslationDownload: View {
     }
 }
 
-// MARK: - 模型
-
-private struct ModelsPage: View {
-    @ObservedObject var settings: SettingsStore
-
-    var body: some View {
-        Form {
-            ProviderEditor(title: "回复用的模型", symbol: "text.bubble.fill", config: $settings.value.llm, showEffort: true,
-                           footer: "会议回复、截屏回复都用它。开会时思考深度 low 比较快。")
-            ProviderEditor(title: "看图用的模型", symbol: "eye.fill", config: $settings.value.vision, showEffort: false,
-                           footer: "截屏回复选「先用看图模型读图」时用。选 Ollama 本机模型，截图不出这台 Mac；模型在「截屏回复」里下载。")
-        }
-        .formStyle(.grouped)
-    }
-}
-
-/// 一组模型设置：服务商、地址、模型（可以从服务商读列表来选）、key、测试
-private struct ProviderEditor: View {
-    let title: String
-    let symbol: String
-    @Binding var config: LLMConfig
-    let showEffort: Bool
-    let footer: String
-
-    @State private var key = ""
-    @State private var models: [String] = []
-    @State private var loadingModels = false
-    @State private var testState: TestState = .idle
-
-    enum TestState: Equatable {
-        case idle
-        case running
-        case passed(String)
-        case failed(String)
-    }
-
-    var body: some View {
-        Section {
-            HStack(spacing: 8) {
-                ForEach(LLMConfig.Provider.allCases) { provider in
-                    ProviderChip(provider: provider, selected: config.provider == provider) { choose(provider) }
-                }
-            }
-            .padding(.vertical, 2)
-            Row(symbol: "link", tint: .blue, title: "接口地址") {
-                TextField("", text: $config.baseURL, prompt: Text(config.provider.defaultBaseURL)).frame(maxWidth: 300)
-            }
-            Row(symbol: "cube.fill", tint: .indigo, title: "模型") {
-                HStack(spacing: 6) {
-                    TextField("", text: $config.model).frame(maxWidth: 220)
-                    Menu {
-                        if models.isEmpty {
-                            Text(loadingModels ? "读取中…" : "点右边的刷新读取列表")
-                        }
-                        ForEach(models, id: \.self) { model in
-                            Button(model) { config.model = model }
-                        }
-                    } label: {
-                        Image(systemName: "chevron.up.chevron.down")
-                    }
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                    .help("从服务商读到的模型")
-                    Button(action: loadModels) {
-                        Image(systemName: "arrow.clockwise")
-                            .rotationEffect(.degrees(loadingModels ? 360 : 0))
-                            .animation(loadingModels ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default,
-                                       value: loadingModels)
-                    }
-                    .buttonStyle(.borderless)
-                    .help("读取模型列表")
-                }
-            }
-            if config.provider.needsKey {
-                Row(symbol: "key.fill", tint: .orange, title: "API key", detail: "存在钥匙串里") {
-                    SecureField("", text: $key).frame(maxWidth: 300)
-                        .onChange(of: key) { Keychain.set(key, for: config.provider.keychainAccount) }
-                }
-            }
-            if showEffort {
-                Row(symbol: "gauge.with.dots.needle.50percent", tint: .teal, title: "思考深度", detail: "越深回复越好，也越慢") {
-                    Picker("", selection: $config.effort) {
-                        Text("低").tag("low")
-                        Text("中").tag("medium")
-                        Text("高").tag("high")
-                        Text("不传").tag("")
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(maxWidth: 240)
-                }
-            }
-            Row(symbol: "bolt.horizontal.circle.fill", tint: .green, title: "测试连接") {
-                HStack(spacing: 8) {
-                    switch testState {
-                    case .idle: EmptyView()
-                    case .running: ProgressView().controlSize(.small)
-                    case .passed(let text): StatusPill(text: text, color: .green, symbol: "checkmark")
-                    case .failed(let text):
-                        Text(text).font(.caption).foregroundStyle(.red).lineLimit(2).textSelection(.enabled)
-                    }
-                    Button("测试", action: test).disabled(testState == .running)
-                }
-            }
-        } header: {
-            Label { Text(title) } icon: { Image(systemName: symbol) }
-        } footer: {
-            Text(footer).font(.caption).foregroundStyle(.secondary)
-        }
-        .onAppear { key = Keychain.get(config.provider.keychainAccount) ?? "" }
-    }
-
-    private func choose(_ provider: LLMConfig.Provider) {
-        guard provider != config.provider else { return }
-        config.provider = provider
-        config.baseURL = provider.defaultBaseURL
-        config.model = provider.defaultModel
-        if provider == .ollama { config.effort = "" }
-        key = Keychain.get(provider.keychainAccount) ?? ""
-        models = []
-        testState = .idle
-    }
-
-    private func loadModels() {
-        loadingModels = true
-        let config = config
-        Task {
-            defer { loadingModels = false }
-            do {
-                models = try await ModelList.fetch(config)
-                if models.isEmpty { testState = .failed("服务商没有返回模型") }
-            } catch {
-                testState = .failed(error.localizedDescription)
-            }
-        }
-    }
-
-    private func test() {
-        testState = .running
-        let config = config
-        Task {
-            do {
-                let client = try LLMFactory.make(config)
-                let started = Date.now
-                _ = try await client.complete(system: "只回答一个字。", user: "说「好」", maxTokens: 2_000)
-                testState = .passed(String(format: "通了 · %.1f 秒", Date.now.timeIntervalSince(started)))
-            } catch {
-                testState = .failed(error.localizedDescription)
-            }
-        }
-    }
-}
-
-private struct ProviderChip: View {
-    let provider: LLMConfig.Provider
-    let selected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 6) {
-                Image(systemName: provider.symbol)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(selected ? Color.white : Color.accentColor)
-                    .frame(width: 28, height: 28)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(selected ? Color.accentColor : Color.accentColor.opacity(0.12)))
-                Text(provider.label).font(.system(size: 12.5, weight: .semibold))
-                Text(provider.detail).font(.system(size: 10.5)).foregroundStyle(.secondary).lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(10)
-            .frame(maxWidth: .infinity, minHeight: 100, alignment: .topLeading)
-            .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.primary.opacity(0.03)))
-            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: selected ? 1.5 : 1))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 // MARK: - 截屏回复
 
 private struct ScreenshotPage: View {
     @ObservedObject var settings: SettingsStore
-    @Binding var page: SettingsPage?
 
     var body: some View {
         Form {
@@ -874,9 +962,8 @@ private struct ScreenshotPage: View {
                                selected: settings.value.screenshotMode == mode) { settings.value.screenshotMode = mode }
                 }
                 if settings.value.screenshotMode == .visionModel {
-                    Row(symbol: "eye.fill", tint: .teal, title: "看图模型",
-                        detail: "\(settings.value.vision.provider.label) · \(settings.value.vision.model)") {
-                        Button("去设置") { page = .models }
+                    Row(symbol: "eye.fill", tint: .teal, title: "看图模型") {
+                        ModelPicker(settings: settings, slot: $settings.value.visionSlot, capability: .vision)
                     }
                 }
             } header: {
@@ -888,7 +975,7 @@ private struct ScreenshotPage: View {
             } header: {
                 Text("文字识别和本机看图模型")
             } footer: {
-                Text("系统自带的文字识别不用下载。想让截图不出这台 Mac 又能看懂版面，就下载一个本机看图模型（通过 Ollama），再在「模型 → 看图用的模型」里选它。")
+                Text("系统自带的文字识别不用下载，最小最快。想让截图不出这台 Mac 又能看懂版面，就下载一个本机看图模型（通过 Ollama），点「用这个」。这几个模型 16 GB 内存的笔记本也跑得动。")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -977,7 +1064,8 @@ private struct OllamaCatalog: View {
 
     private func modelRow(_ model: Ollama.Recommended) -> some View {
         let isInstalled = installed.contains(model.id) || installed.contains("\(model.id):latest")
-        let inUse = settings.value.vision.provider == .ollama && settings.value.vision.model == model.id
+        let inUse = settings.value.provider(settings.value.visionSlot.providerID)?.kind == .ollama
+            && settings.value.visionSlot.model == model.id
         return HStack(spacing: 12) {
             IconTile(symbol: model.symbol, colors: [Color(red: 0.36, green: 0.62, blue: 1.0), Color(red: 0.42, green: 0.36, blue: 0.95)], size: 30)
             VStack(alignment: .leading, spacing: 2) {
@@ -996,11 +1084,7 @@ private struct OllamaCatalog: View {
             if inUse {
                 StatusPill(text: "正在用", color: .accentColor, symbol: "checkmark")
             } else if isInstalled {
-                Button("用这个") {
-                    settings.value.vision = LLMConfig(provider: .ollama, baseURL: LLMConfig.Provider.ollama.defaultBaseURL,
-                                                      model: model.id, effort: "")
-                    settings.value.screenshotMode = .visionModel
-                }
+                Button("用这个") { use(model.id) }
             } else if downloading[model.id] != nil {
                 Text("\(Int((downloading[model.id] ?? 0) * 100))%").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             } else {
@@ -1008,6 +1092,17 @@ private struct OllamaCatalog: View {
                     .disabled(version == nil)
             }
         }
+    }
+
+    /// 用本机模型看图：没有 Ollama 服务商就加一个
+    private func use(_ model: String) {
+        if !settings.value.providers.contains(where: { $0.kind == .ollama }), let template = ProviderTemplate.find("ollama") {
+            settings.value.providers.append(Provider(id: template.id, name: template.name, kind: template.kind,
+                                                     baseURL: template.baseURL, template: template.id))
+        }
+        let ollama = settings.value.providers.first { $0.kind == .ollama }!
+        settings.value.visionSlot = ModelSlot(providerID: ollama.id, model: model)
+        settings.value.screenshotMode = .visionModel
     }
 
     private func refresh() async {
@@ -1053,7 +1148,7 @@ private struct AppearancePage: View {
                 Text("主题")
             }
             Section {
-                Row(symbol: "circle.lefthalf.filled", tint: .pink, title: "底色浓度", detail: "往左越透明，最左边只剩玻璃") {
+                Row(symbol: "circle.lefthalf.filled", tint: .pink, title: "底色浓度", detail: "最左边完全透明；往右先出现玻璃，再加深底色") {
                     HStack(spacing: 8) {
                         Image(systemName: "circle.dotted").foregroundStyle(.secondary)
                         Slider(value: $settings.value.overlayOpacity, in: 0...0.95).frame(width: 200)

@@ -109,38 +109,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = item
     }
 
+    /// 菜单栏菜单：按"听 → 回复 → 截屏 → 悬浮窗 → 设置 → 退出"排，每项带图标和快捷键
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        menu.addItem(menuItem(session.isRunning ? "停止听（⌃⌥L）" : "开始听（⌃⌥L）", #selector(toggleListening)))
-        menu.addItem(menuItem(overlay?.isVisible == true ? "隐藏悬浮窗（⌃⌥T）" : "显示悬浮窗（⌃⌥T）", #selector(toggleOverlayAction)))
-        menu.addItem(menuItem("回复（⌃⌥R）", #selector(replyAction)))
-        menu.addItem(menuItem("截屏回复：\(settings.value.captureTarget.title)（⌃⌥S）", #selector(screenshotAction)))
-        menu.addItem(menuItem("截屏回复：框选（⌃⌥A）", #selector(regionAction)))
-        menu.addItem(menuItem("用剪贴板里的图片回复", #selector(clipboardImageAction)))
-        let translation = menuItem("翻译", #selector(toggleTranslation))
-        translation.state = settings.value.translationEnabled ? .on : .off
+        let running = session.isRunning
+        let current = settings.value
+        let status = NSMenuItem(title: running ? "正在听" : "没在听", action: nil, keyEquivalent: "")
+        status.image = symbol(running ? "record.circle.fill" : "record.circle")
+        status.isEnabled = false
+        let sources = [current.captureRemote ? "远端" : nil, current.captureLocal ? "本地" : nil].compactMap { $0 }
+        status.subtitle = "\(sources.isEmpty ? "没开声音来源" : sources.joined(separator: " + ")) · \(current.speechMethod.title)"
+        menu.addItem(status)
+        menu.addItem(item(running ? "停止听" : "开始听", "waveform", #selector(toggleListening), key: "l"))
+        menu.addItem(.separator())
+
+        menu.addItem(item(session.selection.isEmpty ? "回复最近的话" : "回复选中的 \(session.selection.count) 句",
+                          "arrowshape.turn.up.left.fill", #selector(replyAction), key: "r"))
+        let capture = item("截屏回复", "camera.viewfinder", nil)
+        let submenu = NSMenu()
+        for target in AppSettings.CaptureTarget.allCases {
+            let key = target == current.captureTarget ? "s" : (target == .region ? "a" : "")
+            let entry = item(target.title, target.symbol, #selector(captureAction(_:)), key: key)
+            entry.representedObject = target.rawValue
+            submenu.addItem(entry)
+        }
+        submenu.addItem(.separator())
+        submenu.addItem(item("用剪贴板里的图片", "doc.on.clipboard", #selector(clipboardImageAction)))
+        capture.submenu = submenu
+        menu.addItem(capture)
+        menu.addItem(.separator())
+
+        menu.addItem(item(overlay?.isVisible == true ? "隐藏悬浮窗" : "显示悬浮窗", "macwindow", #selector(toggleOverlayAction), key: "t"))
+        let translation = item("显示译文", "character.bubble", #selector(toggleTranslation))
+        translation.state = current.translationEnabled ? .on : .off
         menu.addItem(translation)
-        let clickThrough = menuItem("点击穿透（⌃⌥P）", #selector(toggleClickThrough))
+        let clickThrough = item("点击穿透", "cursorarrow.motionlines", #selector(toggleClickThrough), key: "p")
         clickThrough.state = overlayState.clickThrough ? .on : .off
         menu.addItem(clickThrough)
         menu.addItem(.separator())
-        menu.addItem(menuItem("会话与设置…", #selector(openMainAction)))
-        menu.addItem(.separator())
-        menu.addItem(menuItem("关于 Tyto 听译", #selector(about)))
-        menu.addItem(menuItem("退出（⌃⌥Q）", #selector(quit)))
+
+        let settingsItem = item("会话与设置…", "gearshape", #selector(openMainAction))
+        settingsItem.keyEquivalent = ","
+        settingsItem.keyEquivalentModifierMask = [.command]
+        menu.addItem(settingsItem)
+        menu.addItem(item("关于 Tyto 听译", "info.circle", #selector(about)))
+        menu.addItem(item("退出", "power", #selector(quit), key: "q"))
     }
 
-    private func menuItem(_ title: String, _ action: Selector) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+    private func symbol(_ name: String) -> NSImage? {
+        NSImage(systemSymbolName: name, accessibilityDescription: nil)
+    }
+
+    /// - key: 全局快捷键 ⌃⌥ + 这个键（只是在菜单里显示出来；真正响应的是全局热键）
+    private func item(_ title: String, _ symbolName: String, _ action: Selector?, key: String = "") -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        if !key.isEmpty { item.keyEquivalentModifierMask = [.control, .option] }
         item.target = self
+        item.image = symbol(symbolName)
         return item
+    }
+
+    @objc private func captureAction(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let target = AppSettings.CaptureTarget(rawValue: raw) else { return }
+        screenshotReply(target)
     }
 
     @objc private func toggleListening() { session.toggle() }
     @objc private func toggleOverlayAction() { toggleOverlay() }
     @objc private func replyAction() { reply() }
-    @objc private func screenshotAction() { screenshotReply() }
-    @objc private func regionAction() { screenshotReply(.region) }
     @objc private func clipboardImageAction() {
         session.replyToClipboardImage()
         if overlay?.isVisible == false { overlay?.orderFrontRegardless() }

@@ -13,26 +13,30 @@ extension LLMClient {
 }
 
 enum LLMFactory {
-    static func make(_ config: LLMConfig, model: String? = nil) throws -> LLMClient {
-        // 钥匙串里没有时，也认环境变量 TYTO_LLM_API_KEY（命令行自测用）
-        let key = Keychain.get(config.provider.keychainAccount) ?? ProcessInfo.processInfo.environment["TYTO_LLM_API_KEY"]
-        let base = config.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let baseURL = URL(string: base.isEmpty ? config.provider.defaultBaseURL : base) else {
-            throw TytoError.server("接口地址不对：\(config.baseURL)")
+    static func make(_ resolved: ResolvedModel) throws -> LLMClient {
+        let provider = resolved.provider
+        let base = provider.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let baseURL = URL(string: base.isEmpty ? provider.info.baseURL : base) else {
+            throw TytoError.server("「\(provider.name)」的接口地址不对：\(provider.baseURL)")
         }
-        let model = (model ?? config.model).trimmingCharacters(in: .whitespacesAndNewlines)
-        let effort = config.effort.trimmingCharacters(in: .whitespacesAndNewlines)
-        switch config.provider {
+        switch provider.kind {
         case .anthropic:
-            guard let key else { throw TytoError.missingAPIKey("Anthropic") }
-            return AnthropicClient(baseURL: baseURL, apiKey: key, model: model, effort: effort)
+            guard let key = provider.key else { throw TytoError.missingAPIKey(provider.name) }
+            return AnthropicClient(baseURL: baseURL, apiKey: key, model: resolved.model, effort: resolved.effort)
         case .openAICompatible:
-            // 本机的 LM Studio 之类不用 key
-            return OpenAICompatibleClient(baseURL: baseURL, apiKey: key, model: model, effort: effort)
+            // 本机的 LM Studio、自建服务可以不用 key
+            return OpenAICompatibleClient(baseURL: baseURL, apiKey: provider.key, model: resolved.model, effort: resolved.effort)
         case .ollama:
             // Ollama 也提供 OpenAI 兼容接口（/v1/chat/completions），本机不用 key
-            return OpenAICompatibleClient(baseURL: baseURL, apiKey: nil, model: model, effort: "")
+            return OpenAICompatibleClient(baseURL: baseURL, apiKey: nil, model: resolved.model, effort: "")
+        case .soniox, .deepgram:
+            throw TytoError.server("「\(provider.name)」是语音识别服务，不能用来回复")
         }
+    }
+
+    /// 某个用途的模型
+    static func make(_ slot: ModelSlot, for use: String, in settings: AppSettings) throws -> LLMClient {
+        try make(settings.resolve(slot, for: use))
     }
 }
 

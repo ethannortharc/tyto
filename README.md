@@ -20,19 +20,18 @@ Tyto 是仓鸮属的拉丁名——仓鸮在黑暗里只靠听声音就能定位
   - 只用本机 OCR（系统自带的文字识别，免下载、不联网）。
 
   结果是一句场景说明 + 三个能直接粘贴的回复（推荐、换个取向、婉拒或推迟），第一个自动进剪贴板，⌘V 就能发；可以补一句"想怎么回"再重新生成。也可以用剪贴板里已有的图片。
-- **本机看图模型**：设置里列出推荐的模型（Qwen3-VL 2B / 4B / 8B、DeepSeek-OCR），通过 Ollama 一键下载，带进度。
-- **模型随便换**：回复用的模型和看图用的模型分开设，各自选服务商（Anthropic、OpenAI 兼容、Ollama 本机）、填地址，模型可以从服务商读列表直接选。
-- **会话**：会议名称、背景、关键词、技能、说话人名字；记录自动保存，可以导出 Markdown。
-- **外观**：macOS 26 的玻璃材质，三套配色（曜石、极光、香槟）；底色浓度从 0（只剩清透的玻璃）到很深都能调，调淡时文字自动加阴影；字号可调。悬浮窗顶部的调色盘图标随时改，设置里有实时预览。
-- **设置窗口**：系统设置风格，左侧图标分页（会话、技能、声音来源、语音识别、翻译、模型、截屏回复、外观、快捷键、权限与关于），权限页显示每项权限的状态，一键打开对应的系统设置。
+- **本机看图模型**：设置里列出推荐的小模型（Qwen3-VL 2B 1.9 GB、GLM-OCR 0.9B 1.8 GB、Qwen3-VL 4B 3.3 GB），通过 Ollama 一键下载，带进度。系统自带的文字识别不用下载。
+- **模型统一配置**：服务商只配一次（地址、key），回复、看图、翻译、语音识别四个用途都从里面选"服务商 + 模型"，模型可以从服务商读列表。内置模板：Anthropic、OpenAI、OpenRouter、Google Gemini、DeepSeek、通义千问、硅基流动、Groq、Ollama 本机、LM Studio 本机、Soniox、Deepgram，以及任意 OpenAI 兼容的自定义接口。
+- **外观**：macOS 26 的玻璃材质，三套配色（曜石、极光、香槟）；底色浓度最左边完全透明（只剩文字），往右先出现玻璃、再加深底色，调淡时文字自动加阴影；字号可调。悬浮窗顶部的调色盘图标随时改，设置里有实时预览。
+- **设置窗口**：系统设置风格，左侧图标分页——会议（会话、技能）、功能（听写、翻译、截屏回复）、设置（模型与服务、外观、快捷键、权限与关于），权限页显示每项权限的状态，一键打开对应的系统设置。
 - **模型可以换**：
 
   | 用途 | 可选 |
   |---|---|
-  | 语音识别 | Apple 本机（免费、不联网、不区分说话人）；Soniox 云端（区分说话人、多语言自动识别） |
-  | 翻译 | Apple 本机（免费、不联网）；大模型 |
-  | 回复建议 | Anthropic Claude；OpenAI 兼容接口（OpenAI、DeepSeek、通义、Gemini、OpenRouter、LM Studio…）；Ollama 本机 |
-  | 截屏看图 | 同上，单独设；推荐本机 Qwen3-VL（Ollama） |
+  | 语音识别 | Apple 本机（免费、不联网）；实时识别服务 Soniox、Deepgram（边说边出字，分得出说话人）；语音转写接口（OpenAI、Groq、硅基流动、自建 Whisper：按停顿一句一句传）；让能听音频的模型听写（OpenRouter、Gemini） |
+  | 翻译 | Apple 本机（免费、不联网）；任意大模型 |
+  | 回复建议 | 任意大模型（Claude、GPT、Gemini、DeepSeek、通义、OpenRouter 上的模型、本机 Ollama / LM Studio） |
+  | 截屏看图 | 任意能看图的模型；本机推荐 Qwen3-VL 2B（1.9 GB）或 GLM-OCR（1.8 GB），16 GB 内存的笔记本也跑得动 |
 
 ## 运行
 
@@ -91,7 +90,14 @@ build/Tyto.app/Contents/MacOS/Tyto --selftest-capture frontWindow --out /tmp/fro
 # 对着一个地址测：三家服务商读模型列表、Ollama 检测和下载
 build/Tyto.app/Contents/MacOS/Tyto --selftest-providers http://127.0.0.1:11434
 
-# 以上自测都可以临时改设置（不写回）：--settings-json '{"screenshotMode":"visionModel"}'
+# 读出现在的设置（老版本的设置会被换算），只看不写
+build/Tyto.app/Contents/MacOS/Tyto --selftest-settings
+
+# Deepgram 返回消息的解析（说话人拆分、断句）
+build/Tyto.app/Contents/MacOS/Tyto --selftest-deepgram
+
+# 以上自测都可以临时改设置（不写回），比如用语音转写接口识别一个文件：
+#   --settings-json '{"speechMethod":"transcription","speechSlot":{"providerID":"groq","model":"whisper-large-v3-turbo"}}'
 
 # 用示例数据把悬浮窗画成图片（三套主题 + 截屏回复），不截屏
 build/Tyto.app/Contents/MacOS/Tyto --render-preview /tmp/tyto-preview
@@ -123,11 +129,11 @@ open build/Tyto.app --args --start
 Sources/Tyto/
   App/        启动、菜单栏、全局快捷键
   Audio/      系统声音（Core Audio 进程音频捕获）、麦克风、重采样到 16kHz
-  Speech/     识别引擎：Apple SpeechAnalyzer、Soniox WebSocket
+  Speech/     识别引擎：Apple SpeechAnalyzer、Soniox、Deepgram（WebSocket）、按停顿切句上传（转写接口 / 听写模型）
   Translate/  Apple 本机翻译、大模型翻译
   Screenshot/ 截前台 App / 整屏 / 框选（认出来源 App）、剪贴板图片、本机 OCR（Apple Vision）
   LLM/        Claude / OpenAI 兼容 / Ollama（流式、可带图片）、读模型列表、Ollama 下载、各种提示词、回复分段
-  Model/      会话（分句、翻译、回复、保存）、设置、技能
+  Model/      会话（分句、翻译、回复、保存）、设置（服务商 + 用途）、技能
   UI/         悬浮窗、主题、关键字高亮、会话与设置窗口
   Dev/        自测、运行日志
 Sources/ShareCheck/   共享屏幕验证程序（scripts/build-app.sh ShareCheck）
@@ -136,7 +142,8 @@ Sources/ShareCheck/   共享屏幕验证程序（scripts/build-app.sh ShareCheck
 ## 还没做 / 已知限制
 
 - 模型还没定，现在默认 Apple 本机识别 + Apple 本机翻译 + Claude Opus 5.5（effort low）。
-- Soniox 云端识别按官方协议写好了，还没用真的 key 测过。
+- Soniox、Deepgram 按官方协议写好了（解析用 Deepgram 的标准消息测过），还没用真的 key 连过。
+- 语音转写接口和听写模型要等一句说完（停顿 0.7 秒）才出字，比实时识别慢一两秒。
 - 本机识别不区分说话人，一路只认一种语言（在设置里分别指定远端、本地的语言）。
 - 远端录的是除 Tyto 以外所有 app 的声音，开会时别放音乐和视频。
 - 悬浮窗里的下拉菜单是系统画的，共享屏幕时可能被看到（只在弹出的那一下）。

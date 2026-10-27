@@ -25,3 +25,41 @@ protocol SpeechEngine: AnyObject, Sendable {
     func append(_ samples: [Float])
     func stop() async
 }
+
+/// 按设置建识别引擎（app 和自测共用）
+enum SpeechEngines {
+    static func make(for channel: Channel, settings: AppSettings) throws -> SpeechEngine {
+        let hints = settings.speechLanguageHints.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        switch settings.speechMethod {
+        case .apple:
+            return AppleSpeechEngine(locale: channel == .remote ? settings.remoteLocale : settings.localLocale)
+        case .streaming:
+            let resolved = try settings.resolve(settings.speechSlot, for: "语音识别")
+            let provider = resolved.provider
+            switch provider.kind {
+            case .soniox:
+                return SonioxSpeechEngine(apiKey: provider.key ?? "", baseURL: provider.baseURL, model: resolved.model,
+                                          languageHints: hints)
+            case .deepgram:
+                return DeepgramSpeechEngine(apiKey: provider.key ?? "", baseURL: provider.baseURL, model: resolved.model,
+                                            language: hints.count == 1 ? hints[0] : "multi")
+            default:
+                throw TytoError.server("「\(provider.name)」不是实时识别服务，请选 Soniox 或 Deepgram")
+            }
+        case .transcription, .audioModel:
+            let resolved = try settings.resolve(settings.speechSlot, for: "语音识别")
+            let provider = resolved.provider
+            guard provider.kind == .openAICompatible || provider.kind == .ollama,
+                  let url = URL(string: provider.baseURL.trimmingCharacters(in: .whitespaces)) else {
+                throw TytoError.server("「\(provider.name)」不能用来转写，请选 OpenAI 兼容的服务商")
+            }
+            let backend: ChunkedSpeechEngine.Backend = settings.speechMethod == .transcription
+                ? .transcription(baseURL: url, apiKey: provider.key, model: resolved.model,
+                                 language: hints.count == 1 ? hints[0] : nil)
+                : .audioChat(baseURL: url, apiKey: provider.key, model: resolved.model,
+                             languages: hints.isEmpty ? "自动判断" : hints.joined(separator: "、"))
+            return ChunkedSpeechEngine(backend: backend)
+        }
+    }
+}

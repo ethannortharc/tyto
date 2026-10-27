@@ -92,7 +92,11 @@ struct OverlayTheme {
     }
 }
 
-/// 悬浮窗的底：macOS 26 的玻璃（真模糊后面的画面），压一层主题色保证文字看得清，再加一圈细的高光描边。
+/// 悬浮窗的底。底色浓度 opacity（0～0.95）分三段：
+/// - 0：什么都没有，完全透明，只剩文字（文字自带阴影）和一圈很淡的边；
+/// - 0～0.25：玻璃逐渐出现（清透的那种）；
+/// - 0.25 以上：玻璃上再叠主题底色，越往右越深，0.4 以上换成磨砂玻璃。
+/// 系统玻璃几乎不理会染色的透明度，所以深浅靠单独一层底色。
 struct GlassBackground: View {
     let theme: OverlayTheme
     let opacity: Double
@@ -100,18 +104,30 @@ struct GlassBackground: View {
     var flat = false
     var cornerRadius: CGFloat = 22
 
+    static let glassFullAt = 0.25
+
+    var glassAmount: Double { min(1, opacity / Self.glassFullAt) }
+    var tintAmount: Double { max(0, (opacity - Self.glassFullAt) / (0.95 - Self.glassFullAt)) * 0.9 }
+
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         ZStack {
-            if !flat {
-                // 系统玻璃几乎不理会染色的透明度，所以玻璃本身不染色，深浅靠上面单独一层底色。
-                // 拉到最左时换成更清透的玻璃，磨砂感更少。
-                Color.clear.glassEffect(opacity < 0.05 ? .clear : .regular, in: shape)
+            if !flat, glassAmount > 0 {
+                Color.clear
+                    .glassEffect(opacity < 0.4 ? .clear : .regular, in: shape)
+                    .opacity(glassAmount)
             }
-            shape.fill(theme.tint.opacity(opacity))
-            shape.fill(LinearGradient(colors: [theme.accent.opacity(0.08), .clear], startPoint: .top, endPoint: .center))
-            shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.24), .white.opacity(0.05)],
+            shape.fill(theme.tint.opacity(flat ? max(tintAmount, opacity * 0.5) : tintAmount))
+            if opacity > 0.1 {
+                shape.fill(LinearGradient(colors: [theme.accent.opacity(0.08), .clear], startPoint: .top, endPoint: .center))
+            }
+            shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.24 * max(0.45, glassAmount)), .white.opacity(0.05)],
                                               startPoint: .top, endPoint: .bottom), lineWidth: 1)
         }
+    }
+
+    /// 背景越透明，文字阴影越重，盖在亮的画面上也看得清
+    static func textShadow(_ opacity: Double) -> Double {
+        min(0.9, max(0, 0.6 - opacity) * 1.4 + (opacity < 0.08 ? 0.15 : 0))
     }
 }

@@ -121,10 +121,11 @@ struct VisionPrompt {
     let user: String
 
     init(model: String, source: String?) {
-        // DeepSeek-OCR 这类专门转文字的模型对提示很敏感，用它自己的固定说法
-        if model.lowercased().contains("ocr") {
+        // 专门转文字的 OCR 模型对提示很敏感，用它们自己的固定说法
+        let lowered = model.lowercased()
+        if lowered.contains("ocr") {
             system = ""
-            user = "Free OCR."
+            user = lowered.contains("deepseek") ? "Free OCR." : "Text Recognition:"
             return
         }
         system = "你把屏幕截图整理成文字，交给另一个助手去写回复。只整理看到的内容，不要回复，不要编造，看不清的写「?」。"

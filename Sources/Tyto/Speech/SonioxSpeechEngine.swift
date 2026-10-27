@@ -18,19 +18,23 @@ final class SonioxSpeechEngine: SpeechEngine, @unchecked Sendable {
     private var stopping = false
     private var finished: CheckedContinuation<Void, Never>?
     private var receiveTask: Task<Void, Never>?
+    private var keepAliveTask: Task<Void, Never>?
 
     /// 大约 120ms 发一次音频
     private static let chunkSamples = 1_920
 
-    init(apiKey: String, model: String, languageHints: [String]) {
+    private let endpoint: URL
+
+    init(apiKey: String, baseURL: String, model: String, languageHints: [String]) {
         self.apiKey = apiKey
+        endpoint = URL(string: baseURL) ?? Self.endpoint
         self.model = model
         self.languageHints = languageHints
         (events, eventSink) = AsyncStream.makeStream(of: SpeechEvent.self)
     }
 
     func start() async throws {
-        var request = URLRequest(url: Self.endpoint)
+        var request = URLRequest(url: endpoint)
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         let socket = URLSession.shared.webSocketTask(with: request)
         socket.resume()
@@ -53,6 +57,14 @@ final class SonioxSpeechEngine: SpeechEngine, @unchecked Sendable {
 
         lock.withLock { self.socket = socket }
         receiveTask = Task { [weak self] in await self?.receiveLoop(socket) }
+        // 系统声音只在有声音时才送数据；20 秒既没音频又没 keepalive，Soniox 会断开（408）
+        keepAliveTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(8))
+                guard !Task.isCancelled else { return }
+                socket.send(.string(#"{"type":"keepalive"}"#)) { _ in }
+            }
+        }
     }
 
     func append(_ samples: [Float]) {
@@ -68,6 +80,7 @@ final class SonioxSpeechEngine: SpeechEngine, @unchecked Sendable {
     }
 
     func stop() async {
+        keepAliveTask?.cancel()
         let (socket, rest): (URLSessionWebSocketTask?, Data?) = lock.withLock {
             stopping = true
             let rest = outgoing.isEmpty ? nil : outgoing.withUnsafeBufferPointer { Data(buffer: $0) }

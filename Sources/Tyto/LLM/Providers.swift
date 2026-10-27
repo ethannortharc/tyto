@@ -2,25 +2,27 @@ import Foundation
 
 /// 从服务商那里读模型列表，设置里可以直接选，不用手敲模型名。
 enum ModelList {
-    static func fetch(_ config: LLMConfig) async throws -> [String] {
-        let key = Keychain.get(config.provider.keychainAccount) ?? ProcessInfo.processInfo.environment["TYTO_LLM_API_KEY"]
-        let base = config.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let baseURL = URL(string: base.isEmpty ? config.provider.defaultBaseURL : base) else {
+    static func fetch(_ provider: Provider) async throws -> [String] {
+        let base = provider.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let baseURL = URL(string: base.isEmpty ? provider.info.baseURL : base) else {
             throw TytoError.server("接口地址不对")
         }
-        switch config.provider {
+        switch provider.kind {
         case .anthropic:
-            guard let key else { throw TytoError.missingAPIKey("Anthropic") }
+            guard let key = provider.key else { throw TytoError.missingAPIKey(provider.name) }
             var request = URLRequest(url: baseURL.appending(path: "v1/models").appending(queryItems: [URLQueryItem(name: "limit", value: "100")]))
             request.setValue(key, forHTTPHeaderField: "x-api-key")
             request.setValue("2026-10-21", forHTTPHeaderField: "anthropic-version")
             return try await ids(request, list: "data", field: "id")
         case .openAICompatible:
             var request = URLRequest(url: baseURL.appending(path: "models"))
-            if let key { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
+            if let key = provider.key { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
             return try await ids(request, list: "data", field: "id")
         case .ollama:
             return try await Ollama.installed(host: Ollama.host(from: baseURL))
+        case .soniox, .deepgram:
+            // 实时识别服务没有列模型的接口，用推荐的
+            return provider.info.suggested[.streamingSpeech] ?? []
         }
     }
 
@@ -41,7 +43,8 @@ enum ModelList {
 enum Ollama {
     static let defaultHost = URL(string: "http://127.0.0.1:11434")!
 
-    /// 推荐的本机看图 / OCR 模型（大小来自 Ollama 模型库，2026-10）
+    /// 推荐的本机看图 / OCR 模型：都是小模型，16 GB 内存的笔记本（如 M1 Pro）也跑得动。
+    /// 大小来自 Ollama 模型库（2026-10）。系统自带的文字识别不在这里，它不用下载。
     struct Recommended: Identifiable, Sendable {
         let id: String
         let name: String
@@ -51,14 +54,12 @@ enum Ollama {
     }
 
     static let recommended: [Recommended] = [
-        Recommended(id: "qwen3-vl:4b-instruct", name: "Qwen3-VL 4B", size: "3.3 GB",
-                    note: "推荐：中英文都认得准，看得懂聊天和邮件，M 系列芯片上几秒一张", symbol: "star.fill"),
         Recommended(id: "qwen3-vl:2b-instruct", name: "Qwen3-VL 2B", size: "1.9 GB",
-                    note: "最省：占用最小，简单的聊天截图够用", symbol: "leaf.fill"),
-        Recommended(id: "qwen3-vl:8b-instruct", name: "Qwen3-VL 8B", size: "6.2 GB",
-                    note: "更准：长邮件、复杂版面更稳，内存 16 GB 以上", symbol: "sparkles"),
-        Recommended(id: "deepseek-ocr:3b", name: "DeepSeek-OCR 3B", size: "6.7 GB",
-                    note: "专门转文字：版面、表格还原得好，但不理解内容（要 Ollama 0.13 以上）", symbol: "doc.text.viewfinder"),
+                    note: "推荐：认字又看得懂聊天和邮件，16 GB 笔记本上几秒一张", symbol: "star.fill"),
+        Recommended(id: "glm-ocr:q8_0", name: "GLM-OCR 0.9B", size: "1.8 GB",
+                    note: "最小：专门把图里的字转出来（文档 OCR 评测第一），中英文、表格都行；不理解内容", symbol: "doc.text.viewfinder"),
+        Recommended(id: "qwen3-vl:4b-instruct", name: "Qwen3-VL 4B", size: "3.3 GB",
+                    note: "更准：长邮件、复杂版面更稳，16 GB 内存也够", symbol: "sparkles"),
     ]
 
     static func host(from baseURL: URL) -> URL {

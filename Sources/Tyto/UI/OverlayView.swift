@@ -35,7 +35,7 @@ struct OverlayView: View {
         .font(.system(size: settings.value.fontSize))
         .foregroundStyle(.white)
         // 底色调得很淡时，文字加一圈细阴影，盖在亮的画面上也看得清
-        .shadow(color: .black.opacity(max(0, 0.55 - settings.value.overlayOpacity) * 1.4), radius: 1.2, y: 0.5)
+        .shadow(color: .black.opacity(GlassBackground.textShadow(settings.value.overlayOpacity)), radius: 1.4, y: 0.5)
         .background(GlassBackground(theme: theme, opacity: settings.value.overlayOpacity, flat: flatForPreview))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .environment(\.colorScheme, .dark)
@@ -84,12 +84,15 @@ struct OverlayView: View {
     /// 点一下按设置的方式截图；旁边的小箭头可以选别的方式
     private var captureMenu: some View {
         Menu {
-            ForEach(AppSettings.CaptureTarget.allCases) { target in
-                Button { session.captureAndReply(target) } label: {
-                    Label(target == .region ? "框选（⌃⌥A）" : target.title, systemImage: target.symbol)
+            Section("截屏回复") {
+                ForEach(AppSettings.CaptureTarget.allCases) { target in
+                    Button { session.captureAndReply(target) } label: {
+                        Label(target == settings.value.captureTarget ? "\(target.title) ⌃⌥S"
+                                : target == .region ? "\(target.title) ⌃⌥A" : target.title,
+                              systemImage: target.symbol)
+                    }
                 }
             }
-            Divider()
             Button(action: session.replyToClipboardImage) {
                 Label("用剪贴板里的图片", systemImage: "doc.on.clipboard")
             }
@@ -107,15 +110,22 @@ struct OverlayView: View {
         .help("截屏回复：\(settings.value.captureTarget.title)（⌃⌥S），小箭头选别的方式")
     }
 
+    /// 更多：先是"去哪里"（设置的几个常用页），再是窗口操作
     private var moreMenu: some View {
         Menu {
-            Button(action: actions.openMain) { Label("会话与设置…", systemImage: "gearshape") }
-            Button { ui.clickThrough.toggle() } label: {
-                Label(ui.clickThrough ? "关闭点击穿透（⌃⌥P）" : "点击穿透（⌃⌥P）", systemImage: "cursorarrow.motionlines")
+            Section {
+                Button(action: actions.openMain) { Label("会话与设置…", systemImage: "gearshape") }
+                Button(action: session.replyToClipboardImage) { Label("用剪贴板里的图片回复", systemImage: "doc.on.clipboard") }
             }
-            Divider()
-            Button(action: actions.hide) { Label("隐藏悬浮窗（⌃⌥T）", systemImage: "eye.slash") }
-            Button(action: actions.quit) { Label("退出 Tyto（⌃⌥Q）", systemImage: "power") }
+            Section {
+                Button { ui.clickThrough.toggle() } label: {
+                    Label(ui.clickThrough ? "关闭点击穿透 ⌃⌥P" : "点击穿透 ⌃⌥P", systemImage: "cursorarrow.motionlines")
+                }
+                Button(action: actions.hide) { Label("隐藏悬浮窗 ⌃⌥T", systemImage: "eye.slash") }
+            }
+            Section {
+                Button(action: actions.quit) { Label("退出 Tyto ⌃⌥Q", systemImage: "power") }
+            }
         } label: {
             Image(systemName: "ellipsis.circle")
                 .font(.system(size: 13, weight: .medium))

@@ -12,6 +12,8 @@ import Foundation
 ///   Tyto --selftest-screenshot <图片> [--instruction 要求]                   截屏回复：本机 OCR + 大模型
 ///   Tyto --selftest-capture <frontWindow|screen> [--out 文件]                截图并认出是哪个 App
 ///   Tyto --selftest-providers <地址>                                      读模型列表、Ollama 检测和下载（对着模拟服务）
+///   Tyto --selftest-settings                                              读出现在的设置（老设置会被换算），只看不写
+///   Tyto --selftest-deepgram                                              Deepgram 返回消息的解析
 ///   以上自测都可以加 --settings-json '{...}'，临时改设置，不写回
 ///   Tyto --selftest-glass <文件夹>                                         真实玻璃效果：悬浮窗盖在模拟会议画面上，只截这两个窗口
 ///   Tyto --render-settings <文件夹>                                        把设置窗口每一页画成图片（窗口建在屏幕外，不截屏）
@@ -28,6 +30,13 @@ enum SelfTest {
         // --settings-json '{...}'：这次自测用的设置盖在现有设置上，不写回
         var current = settings.value
         if let json = value(after: "--settings-json") { current = SettingsStore.overriding(current, with: json) }
+        if arguments.contains("--selftest-settings") {
+            exit(settingsSummary(current))
+        }
+        if arguments.contains("--selftest-deepgram") {
+            Task { exit(await deepgram()) }
+            return true
+        }
         if let target = value(after: "--selftest-capture") {
             Task { exit(await capture(target, to: value(after: "--out"))) }
             return true
@@ -39,7 +48,8 @@ enum SelfTest {
         if let file = value(after: "--selftest-speech") {
             let locale = value(after: "--locale") ?? "en-US"
             let target = value(after: "--target") ?? "zh-Hans"
-            Task { exit(await speech(file: file, locale: locale, target: target)) }
+            let translate = !arguments.contains("--no-translate")
+            Task { exit(await speech(file: file, locale: locale, target: translate ? target : nil, settings: current)) }
             return true
         }
         if let file = value(after: "--selftest-screenshot") {
@@ -68,10 +78,14 @@ enum SelfTest {
         return false
     }
 
-    static func speech(file: String, locale: String, target: String) async -> Int32 {
-        print("本机识别：\(file)（\(locale)）")
-        let engine = AppleSpeechEngine(locale: locale)
+    static func speech(file: String, locale: String, target: String?, settings: AppSettings) async -> Int32 {
+        var settings = settings
+        settings.remoteLocale = locale
+        print("识别：\(file)（\(settings.speechMethod.title)"
+              + (settings.speechMethod == .apple ? "，\(locale)）" : "，\(settings.speechSlot.providerID) / \(settings.speechSlot.model)）"))
+        let engine: SpeechEngine
         do {
+            engine = try SpeechEngines.make(for: .remote, settings: settings)
             try await engine.start()
         } catch {
             print("识别没启动：\(error.localizedDescription)")
@@ -112,6 +126,7 @@ enum SelfTest {
         print("识别结果：\(text)")
         guard !text.isEmpty else { return 1 }
 
+        guard let target else { return 0 }
         let source = Locale(identifier: locale).language.languageCode?.identifier
         do {
             let translation = try await AppleTranslator().translate(text, from: source, to: target)
@@ -157,10 +172,10 @@ enum SelfTest {
     }
 
     static func reply(_ settings: AppSettings) async -> Int32 {
-        print("大模型：\(settings.llm.provider.rawValue) \(settings.llm.model)")
+        print("回复模型：\(settings.replySlot.providerID) / \(settings.replySlot.model)")
         let client: LLMClient
         do {
-            client = try LLMFactory.make(settings.llm)
+            client = try LLMFactory.make(settings.replySlot, for: "回复", in: settings)
         } catch {
             print(error.localizedDescription)
             return 1
@@ -214,6 +229,49 @@ enum SelfTest {
         return render(session: session, settings: settings, to: folderURL.appending(path: "screenshot-reply.png")) ? 0 : 1
     }
 
+    static func settingsSummary(_ settings: AppSettings) -> Int32 {
+        print("服务商：" + settings.providers.map { "\($0.name)（\($0.kind.rawValue)，\($0.needsKey ? ($0.key == nil ? "缺 key" : "有 key") : "本机")）" }
+            .joined(separator: "、"))
+        func slot(_ slot: ModelSlot) -> String {
+            slot.providerID.isEmpty ? "跟回复一样" : "\(settings.provider(slot.providerID)?.name ?? "（找不到 \(slot.providerID)）") / \(slot.model)"
+                + (slot.effort.isEmpty ? "" : "，思考 \(slot.effort)")
+        }
+        print("回复：\(slot(settings.replySlot))")
+        print("看图：\(slot(settings.visionSlot))")
+        print("翻译：\(settings.translationProvider == .apple ? "Apple 本机" : slot(settings.translationSlot))")
+        print("语音识别：\(settings.speechMethod.title)" + (settings.speechMethod == .apple ? "（远端 \(settings.remoteLocale)，本地 \(settings.localLocale)）" : "，\(slot(settings.speechSlot))"))
+        print("外观：\(settings.theme.rawValue)，底色 \(Int(settings.overlayOpacity * 100))%，字号 \(Int(settings.fontSize))")
+        return 0
+    }
+
+    /// 把 Deepgram 的几种典型返回喂进去，看解析出的事件
+    static func deepgram() async -> Int32 {
+        let engine = DeepgramSpeechEngine(apiKey: "test", baseURL: "wss://api.deepgram.com/v1/listen", model: "nova-3", language: "multi")
+        let messages = [
+            #"{"type":"Results","is_final":false,"speech_final":false,"channel":{"alternatives":[{"transcript":"could we move","words":[{"word":"could","speaker":0},{"word":"we","speaker":0},{"word":"move","speaker":0}]}]}}"#,
+            #"{"type":"Results","is_final":true,"speech_final":false,"channel":{"alternatives":[{"transcript":"Could we move the launch? Sure, let me check.","words":[{"word":"could","punctuated_word":"Could","speaker":0},{"word":"we","punctuated_word":"we","speaker":0},{"word":"move","punctuated_word":"move","speaker":0},{"word":"the","punctuated_word":"the","speaker":0},{"word":"launch","punctuated_word":"launch?","speaker":0},{"word":"sure","punctuated_word":"Sure,","speaker":1},{"word":"let","punctuated_word":"let","speaker":1},{"word":"me","punctuated_word":"me","speaker":1},{"word":"check","punctuated_word":"check.","speaker":1}]}]}}"#,
+            #"{"type":"Results","is_final":true,"speech_final":true,"channel":{"alternatives":[{"transcript":"Thanks.","words":[{"word":"thanks","punctuated_word":"Thanks.","speaker":1}]}]}}"#,
+            #"{"type":"UtteranceEnd","last_word_end":3.1}"#,
+        ]
+        let collector = Task { () -> [String] in
+            var lines: [String] = []
+            for await event in engine.events {
+                let speaker = event.speaker.map { "说话人\($0)" } ?? "-"
+                lines.append("\(event.kind)｜\(speaker)｜\(event.text)")
+            }
+            return lines
+        }
+        for message in messages { engine.handle(Data(message.utf8)) }
+        await engine.stop()
+        let lines = await collector.value
+        lines.forEach { print($0) }
+        let finals = lines.filter { $0.hasPrefix("final") }
+        let ok = finals.count == 3 && finals[0].contains("说话人0｜Could we move the launch?")
+            && finals[1].contains("说话人1｜Sure, let me check.") && lines.filter { $0.hasPrefix("endOfUtterance") }.count == 2
+        print(ok ? "解析正确" : "解析不对")
+        return ok ? 0 : 1
+    }
+
     /// 截图并认出来源 App（只打印大小和 App 名字）
     static func capture(_ target: String, to out: String?) async -> Int32 {
         guard let target = AppSettings.CaptureTarget(rawValue: target) else {
@@ -239,13 +297,15 @@ enum SelfTest {
     static func providers(host: String) async -> Int32 {
         guard let url = URL(string: host) else { return 1 }
         var failed = 0
-        for (provider, base) in [(LLMConfig.Provider.anthropic, host), (.openAICompatible, "\(host)/v1"), (.ollama, "\(host)/v1")] {
+        for (template, base) in [("anthropic", host), ("openrouter", "\(host)/v1"), ("ollama", "\(host)/v1"), ("deepgram", host)] {
+            guard let info = ProviderTemplate.find(template) else { continue }
+            let provider = Provider(id: "test-\(template)", name: info.name, kind: info.kind, baseURL: base, template: template)
             do {
-                let models = try await ModelList.fetch(LLMConfig(provider: provider, baseURL: base, model: "", effort: ""))
-                print("\(provider.label) 模型列表：\(models)")
+                let models = try await ModelList.fetch(provider)
+                print("\(info.name) 模型列表：\(models)")
             } catch {
                 failed += 1
-                print("\(provider.label) 模型列表出错：\(error.localizedDescription)")
+                print("\(info.name) 模型列表出错：\(error.localizedDescription)")
             }
         }
         print("Ollama 版本：\(await Ollama.version(host: url) ?? "没检测到")")
@@ -290,7 +350,7 @@ enum SelfTest {
         let folderURL = URL(filePath: folder)
         try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
         let displayID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
-        for opacity in [0.0, 0.25, 0.5, 0.8] {
+        for opacity in [0.0, 0.12, 0.25, 0.5] {
             settings.value.overlayOpacity = opacity
             try? await Task.sleep(for: .seconds(1.2))
             do {
@@ -421,14 +481,15 @@ enum SelfTest {
         let client: LLMClient
         let visionClient: LLMClient?
         do {
-            client = try LLMFactory.make(settings.llm)
-            visionClient = settings.screenshotMode == .visionModel ? try LLMFactory.make(settings.vision) : nil
+            client = try LLMFactory.make(settings.replySlot, for: "回复", in: settings)
+            visionClient = settings.screenshotMode == .visionModel
+                ? try LLMFactory.make(settings.visionSlot, for: "看图", in: settings) : nil
         } catch {
             print(error.localizedDescription)
             return 2
         }
-        print("识别方式：\(settings.screenshotMode.title)；回复模型：\(settings.llm.model)"
-              + (visionClient != nil ? "；看图模型：\(settings.vision.model)" : ""))
+        print("识别方式：\(settings.screenshotMode.title)；回复模型：\(settings.replySlot.model)"
+              + (visionClient != nil ? "；看图模型：\(settings.visionSlot.model)" : ""))
         let image = CapturedImage(png: png, appName: appName, bundleID: nil, windowTitle: nil)
         var text = ""
         do {

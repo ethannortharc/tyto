@@ -2,81 +2,7 @@ import Foundation
 import Security
 import SwiftUI
 
-/// 大模型的连接设置。回复建议用它，选了"大模型翻译"时翻译也用它。
-struct LLMConfig: Codable, Equatable, Sendable {
-    enum Provider: String, Codable, CaseIterable, Identifiable, Sendable {
-        case anthropic
-        case openAICompatible
-        case ollama
-
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .anthropic: "Anthropic"
-            case .openAICompatible: "OpenAI 兼容"
-            case .ollama: "Ollama 本机"
-            }
-        }
-        var detail: String {
-            switch self {
-            case .anthropic: "Claude 系列"
-            case .openAICompatible: "OpenAI、Gemini、DeepSeek、通义、OpenRouter、LM Studio…"
-            case .ollama: "在这台 Mac 上跑开源模型，数据不出本机"
-            }
-        }
-        var symbol: String {
-            switch self {
-            case .anthropic: "sparkle"
-            case .openAICompatible: "network"
-            case .ollama: "desktopcomputer"
-            }
-        }
-        var defaultBaseURL: String {
-            switch self {
-            case .anthropic: "https://api.anthropic.com"
-            case .openAICompatible: "https://api.openai.com/v1"
-            case .ollama: "http://127.0.0.1:11434/v1"
-            }
-        }
-        var defaultModel: String {
-            switch self {
-            case .anthropic: "claude-opus-5-5"
-            case .openAICompatible: "gpt-5.5"
-            case .ollama: "qwen3-vl:4b-instruct"
-            }
-        }
-        var needsKey: Bool { self != .ollama }
-        /// 钥匙串里存 API key 用的名字
-        var keychainAccount: String {
-            switch self {
-            case .anthropic: "anthropic"
-            case .openAICompatible: "openai-compatible"
-            case .ollama: "ollama"
-            }
-        }
-    }
-
-    var provider: Provider = .anthropic
-    var baseURL = Provider.anthropic.defaultBaseURL
-    var model = "claude-opus-5-5"
-    /// 思考深度：low / medium / high；空字符串表示不传（有些模型不支持这个参数）
-    var effort = "low"
-}
-
 struct AppSettings: Codable, Equatable {
-    enum SpeechProvider: String, Codable, CaseIterable, Identifiable {
-        case apple
-        case soniox
-
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .apple: "Apple 本机识别（免费、不联网，不区分说话人）"
-            case .soniox: "Soniox 云端识别（区分说话人，多语言自动识别）"
-            }
-        }
-    }
-
     enum TranslationProvider: String, Codable, CaseIterable, Identifiable {
         case apple
         case llm
@@ -90,15 +16,23 @@ struct AppSettings: Codable, Equatable {
         }
     }
 
+    // 服务商和各个用途的模型（字段名都是新的，和老版本的 llm / vision / translationModel 不冲突）
+    var providers: [Provider] = AppSettings.defaultProviders
+    var replySlot = ModelSlot(providerID: "anthropic", model: "claude-opus-5-5", effort: "low")
+    var visionSlot = ModelSlot(providerID: "ollama", model: Ollama.recommended[0].id)
+    /// 大模型翻译用的；providerID 为空表示跟回复用同一个
+    var translationSlot = ModelSlot(providerID: "", model: "")
+
     // 语音识别
-    var speechProvider: SpeechProvider = .apple
+    var speechMethod: SpeechMethod = .apple
+    /// 云端识别用的服务商和模型（实时识别、转写接口、听写模型）
+    var speechSlot = ModelSlot(providerID: "", model: "")
     /// 本机识别时，远端（对方）说的语言
     var remoteLocale = "en-US"
     /// 本机识别时，本地（会议室里）说的语言
     var localLocale = "en-US"
-    /// 云端识别时提示可能出现的语言，逗号分隔
-    var sonioxLanguageHints = "en,zh"
-    var sonioxModel = "stt-rt-v5"
+    /// 云端识别时可能出现的语言，逗号分隔
+    var speechLanguageHints = "en,zh"
 
     // 声音来源
     var captureRemote = true
@@ -113,10 +47,7 @@ struct AppSettings: Codable, Equatable {
     var translationProvider: TranslationProvider = .apple
     var targetLanguage = "zh-Hans"
 
-    // 大模型与回复
-    var llm = LLMConfig()
-    /// 大模型翻译用的模型；空表示跟回复用同一个
-    var translationModel = ""
+    // 回复
     /// 回复里解释对方意思用的语言
     var explainLanguage = "中文"
     /// 建议回复用的语言；空表示跟对方说话的语言一致
@@ -183,15 +114,12 @@ struct AppSettings: Codable, Equatable {
     }
     var captureTarget: CaptureTarget = .frontWindow
 
-    /// 看图用的模型（识别方式选"先用看图模型读图"时用）
-    var vision = LLMConfig(provider: .ollama, baseURL: LLMConfig.Provider.ollama.defaultBaseURL,
-                           model: LLMConfig.Provider.ollama.defaultModel, effort: "")
     /// 截屏回复生成好后，把第一个回复放进剪贴板
     var copyFirstScreenshotReply = true
 
     // 悬浮窗
     var theme: ThemeID = .obsidian
-    /// 底色浓度：0 是只有玻璃（最透明），越大越深
+    /// 底色浓度：0 是完全透明（连玻璃都没有），往右先出现玻璃，再加深底色
     var overlayOpacity = 0.45
     var fontSize = 14.0
 }
@@ -214,10 +142,47 @@ final class SettingsStore: ObservableObject {
     /// 存下来的设置盖在默认值上再解析：以后加了新设置项，老设置里没有的字段用默认值，其余照旧。
     static func decode(_ data: Data) -> AppSettings? {
         guard let defaults = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(AppSettings())) as? [String: Any],
-              let stored = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let merged = try? JSONSerialization.data(withJSONObject: merge(defaults, stored))
+              var stored = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
+        if stored["providers"] == nil { stored = migrate(stored) }
+        guard let merged = try? JSONSerialization.data(withJSONObject: merge(defaults, stored)) else { return nil }
         return try? JSONDecoder().decode(AppSettings.self, from: merged)
+    }
+
+    /// 老版本（每个用途各填一套地址）换成"服务商 + 用途"
+    private static func migrate(_ old: [String: Any]) -> [String: Any] {
+        var result = old
+        let templateFor = ["anthropic": "anthropic", "openAICompatible": "openai", "ollama": "ollama"]
+        var providers: [[String: Any]] = []
+        func slot(from config: [String: Any]?) -> [String: Any]? {
+            guard let config, let kind = config["provider"] as? String, let template = templateFor[kind],
+                  let info = ProviderTemplate.find(template) else { return nil }
+            if !providers.contains(where: { $0["id"] as? String == template }) {
+                providers.append(["id": template, "name": info.name, "kind": info.kind.rawValue,
+                                  "baseURL": config["baseURL"] as? String ?? info.baseURL, "template": template])
+            }
+            return ["providerID": template, "model": config["model"] as? String ?? "", "effort": config["effort"] as? String ?? ""]
+        }
+        if let reply = slot(from: old["llm"] as? [String: Any]) { result["replySlot"] = reply }
+        if let vision = slot(from: old["vision"] as? [String: Any]) { result["visionSlot"] = vision }
+        if let model = old["translationModel"] as? String, !model.isEmpty, var reply = result["replySlot"] as? [String: Any] {
+            reply["model"] = model
+            result["translationSlot"] = reply
+        }
+        if old["speechProvider"] as? String == "soniox", let soniox = ProviderTemplate.find("soniox") {
+            providers.append(["id": "soniox", "name": soniox.name, "kind": soniox.kind.rawValue, "baseURL": soniox.baseURL,
+                              "template": "soniox"])
+            result["speechMethod"] = SpeechMethod.streaming.rawValue
+            result["speechSlot"] = ["providerID": "soniox", "model": old["sonioxModel"] as? String ?? "stt-rt-v5", "effort": ""]
+        }
+        if let hints = old["sonioxLanguageHints"] as? String { result["speechLanguageHints"] = hints }
+        for id in ["anthropic", "ollama"] where !providers.contains(where: { $0["id"] as? String == id }) {
+            if let info = ProviderTemplate.find(id) {
+                providers.append(["id": id, "name": info.name, "kind": info.kind.rawValue, "baseURL": info.baseURL, "template": id])
+            }
+        }
+        result["providers"] = providers
+        return result
     }
 
     /// 在一份设置上盖一段 JSON（自测用：不写进真实设置）
