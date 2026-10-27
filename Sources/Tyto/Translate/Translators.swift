@@ -8,7 +8,7 @@ protocol Translator: Sendable {
     func translate(_ text: String, from source: String?, to target: String) async throws -> String
 }
 
-/// Apple 本机翻译。语言包要先下载（模型与服务 → 下载本机翻译语言），之后不联网。
+/// Apple 本机翻译。语言包要先下载（翻译 → 语言包），之后不联网。
 final class AppleTranslator: Translator, @unchecked Sendable {
     private let lock = NSLock()
     private var sessions: [String: TranslationSession] = [:]
@@ -28,7 +28,10 @@ final class AppleTranslator: Translator, @unchecked Sendable {
         } catch {
             lock.withLock { sessions[key] = nil }
             let status = await LanguageAvailability().status(from: sourceLanguage, to: targetLanguage)
-            if status != .installed { throw TytoError.translationNotInstalled(key) }
+            if status != .installed {
+                throw TytoError.translationNotInstalled(
+                    "\(Languages.name(sourceLanguage.minimalIdentifier)) → \(Languages.name(targetLanguage.minimalIdentifier))")
+            }
             throw error
         }
     }

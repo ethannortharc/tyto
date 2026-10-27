@@ -27,7 +27,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             openMain: { [weak self] in self?.openMainWindow() },
             hide: { [weak self] in self?.toggleOverlay() },
             quit: { NSApp.terminate(nil) },
-            resetSize: { [weak self] in self?.overlay?.resetFrame() })
+            resetSize: { [weak self] in self?.overlay?.resetFrame() },
+            openTranslation: { [weak self] in self?.openMainWindow(page: .translation) })
         let panel = OverlayPanel(rootView: OverlayView(session: session, settings: settings, ui: overlayState,
                                                        actions: actions))
         panel.orderFrontRegardless()
@@ -64,7 +65,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - 窗口
 
-    private func openMainWindow() {
+    private func openMainWindow(page: SettingsPage? = nil) {
+        if let page, let window = mainWindow {
+            // 窗口里当前是哪一页是 MainView 自己的状态，要跳到指定的页就整个换掉
+            window.contentView = NSHostingView(rootView: MainView(session: session, settings: settings, skills: skills, initialPage: page))
+        }
         if mainWindow == nil {
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 900, height: 680),
@@ -76,7 +81,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             window.isReleasedWhenClosed = false
             // 会议背景和记录也不能被共享出去
             window.sharingType = .none
-            window.contentView = NSHostingView(rootView: MainView(session: session, settings: settings, skills: skills))
+            window.contentView = NSHostingView(rootView: MainView(session: session, settings: settings, skills: skills,
+                                                                  initialPage: page ?? .session))
             window.center()
             window.setFrameAutosaveName("TytoMain")
             mainWindow = window

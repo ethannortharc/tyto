@@ -29,7 +29,7 @@ enum TytoError: LocalizedError {
         case .unsupportedLocale(let locale): tr("本机识别不支持这个语言：\(locale)", "On-device recognition doesn't support this language: \(locale)")
         case .unsupportedAudioFormat: tr("不支持的音频格式", "Unsupported audio format")
         case .missingAPIKey(let what): tr("还没填 \(what) 的 API key（模型与服务 里填）", "No API key for \(what) yet (add it in Models & Services)")
-        case .translationNotInstalled(let pair): tr("本机翻译语言没下载：\(pair)（模型与服务 → 下载本机翻译语言）", "On-device translation language not downloaded: \(pair) (Translation → Language Packs)")
+        case .translationNotInstalled(let pair): tr("还没下载翻译语言包（\(pair)），所以译文出不来。下载一次就好，以后不联网也能翻译。", "The translation language pack (\(pair)) isn't downloaded, so no translations yet. Download it once; after that it works offline.")
         case .server(let message): message
         case .screenRecordingPermission:
             tr("截屏要「屏幕录制」权限：系统设置 → 隐私与安全性 → 录屏与系统录音 → 打开 Tyto，然后重开 Tyto。用剪贴板里的图片回复不需要这个权限。", "Screenshots need the Screen Recording permission: System Settings → Privacy & Security → Screen & System Audio Recording → turn on Tyto, then reopen Tyto. Replying with an image from the clipboard doesn't need it.")

@@ -906,7 +906,8 @@ private struct TranslationPage: View {
                                              set: { settings.value.translationEnabled = $0; session.translationToggled() }))
                         .labelsHidden()
                 }
-                Row(symbol: "arrow.right.circle.fill", title: tr("译成", "Translate To")) {
+                Row(symbol: "arrow.right.circle.fill", title: tr("主语言", "Main Language"),
+                    detail: tr("别的语言的句子，下面会多一行小字译文；本来就是主语言的句子不翻译", "Lines in other languages get a smaller translation underneath; lines already in this language are left as is")) {
                     LanguageField(code: $settings.value.targetLanguage, choices: Languages.translationChoices)
                 }
             }

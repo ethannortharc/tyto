@@ -251,7 +251,13 @@ enum SelfTest {
             guard render(session: session, settings: settings, to: folderURL.appending(path: "screenshot-reply-\(theme.rawValue).png"))
             else { return 1 }
         }
-        return 0
+        // 翻译语言包没下载时的提示条
+        settings.value.theme = AppSettings().theme
+        session.showSample(rows: rows, replies: [], selection: [])
+        session.notice = TytoError.translationNotInstalled(tr("英语 → 简体中文", "English → Simplified Chinese")).localizedDescription
+        session.noticeOpensTranslation = true
+        defer { session.notice = nil }
+        return render(session: session, settings: settings, to: folderURL.appending(path: "notice-translation.png")) ? 0 : 1
     }
 
     static func models(_ id: String, settings: AppSettings) async -> Int32 {

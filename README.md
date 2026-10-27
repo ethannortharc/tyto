@@ -27,7 +27,7 @@ A floating meeting assistant for macOS. It turns what people say into live capti
 
 - **Hidden from screen sharing**: the overlay and settings window don't appear when you share your screen in Zoom, Teams, Google Meet or Lark ([how this was verified](docs/share-check.md), in Chinese).
 - **Two audio channels**: *remote* is the meeting app's sound (system audio), *local* is your microphone (you and anyone in the room). With cloud recognition, speakers are told apart as Speaker 1, 2, 3 — click a name to rename it "Me" or "Alice".
-- **Original and translation side by side**: each line shows its translation underneath, toggled with one click. Numbers, dates, amounts, names and your own keywords are highlighted; questions get a tag.
+- **Original and translation side by side**: pick your main language; lines in other languages get a smaller, fainter translation underneath, toggled with one click. Numbers, dates, amounts, names and your own keywords are highlighted; questions get a tag.
 - **One-click replies**: click a line, select several, or reply to "the latest". Replies use the meeting background and the skills you picked, in three parts: what they mean, what you can say, and a translation of your reply.
 - **Screenshot replies**: ⌃⌥S captures the frontmost app (say, a Teams chat), works out who is asking what, and writes three replies you can paste; the first is already on your clipboard.
 - **Bring any model**: configure each provider once, then choose a model for replies, vision, translation and transcription. Supports Anthropic, OpenAI, OpenRouter, Gemini, DeepSeek, Tongyi Qwen, SiliconFlow, Groq, Soniox, Deepgram, local Ollama / LM Studio, and any OpenAI-compatible endpoint.
@@ -47,7 +47,7 @@ The app is notarized by Apple, so it opens normally. Tyto has no Dock icon — l
 The settings window opens on first launch. The interface follows your system language (Chinese or English); switch it any time from the menu bar icon → *Language*, or on the *Appearance* page.
 
 1. **Models & services**: add a provider and its key (OpenRouter is a good start: one key covers Claude, GPT and Gemini), then pick a model under *Uses → Reply*. To try captions and translation only, skip this — on-device recognition and translation need no key.
-2. **Translation**: if you use Apple's on-device translation, click *Download* to install the language pair.
+2. **Translation**: pick your main language. With Apple's on-device translation, click *Download* to install the language pair (if it's missing, the overlay says so and its *Download* button takes you there).
 3. Press **⌃⌥L** to start listening. macOS asks for **System Audio Recording** (the meeting app) and **Microphone** (the room).
 4. For screenshot replies, enable Tyto under *System Settings → Privacy & Security → Screen & System Audio Recording*, then reopen Tyto.
 

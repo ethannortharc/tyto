@@ -19,7 +19,11 @@ final class SessionModel: ObservableObject {
     @Published private(set) var isRunning = false
     @Published private(set) var isStarting = false
     /// 最近一条提示（多半是出错信息）
-    @Published var notice: String?
+    @Published var notice: String? {
+        didSet { if notice == nil { noticeOpensTranslation = false } }
+    }
+    /// 提示是"翻译语言包没下载"时，提示条上多一个"去下载"按钮
+    @Published var noticeOpensTranslation = false
     @Published private(set) var levels: [Channel: Float] = [:]
 
     let settings: SettingsStore
@@ -347,6 +351,7 @@ final class SessionModel: ObservableObject {
             if !Task.isCancelled, !(error is CancellationError), error.localizedDescription != lastTranslationError {
                 lastTranslationError = error.localizedDescription
                 notice = error.localizedDescription
+                if case TytoError.translationNotInstalled = error { noticeOpensTranslation = true }
                 RunLog.write("翻译：\(error.localizedDescription)")
             }
         }

@@ -6,6 +6,8 @@ struct OverlayActions {
     var hide: () -> Void = {}
     var quit: () -> Void = {}
     var resetSize: () -> Void = {}
+    /// 打开设置窗口的翻译页（下载语言包）
+    var openTranslation: () -> Void = {}
 }
 
 /// 悬浮窗：顶部控制栏，中间是原文/译文对照的字幕，底部是回复。
@@ -155,7 +157,14 @@ struct OverlayView: View {
     private func noticeBanner(_ notice: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
-            Text(notice).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(notice).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                if session.noticeOpensTranslation {
+                    PillButton(title: tr("去下载", "Download"), symbol: "arrow.down.circle", prominent: true, theme: theme) {
+                        actions.openTranslation()
+                    }
+                }
+            }
             Spacer(minLength: 0)
             Button { session.notice = nil } label: {
                 Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.6))
@@ -163,8 +172,11 @@ struct OverlayView: View {
             .buttonStyle(.plain)
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.orange.opacity(0.16)))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.orange.opacity(0.3)))
+        // 提示条盖在字幕上面，底要实，不然下面的字会透出来
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.tint.opacity(0.96)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.orange.opacity(0.12)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.orange.opacity(0.35)))
+        .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
         .padding(10)
     }
 
@@ -469,8 +481,8 @@ private struct RowView: View {
                 .fixedSize(horizontal: false, vertical: true)
             if showTranslation, let translation = row.translation {
                 Text(Highlighter.text(translation, keywords: keywords, theme: theme,
-                                      base: theme.translation.opacity(0.8), entities: false))
-                    .font(.system(size: fontSize - 0.5))
+                                      base: theme.translation.opacity(0.72), entities: false))
+                    .font(.system(size: fontSize - 1.5))
                     .lineSpacing(1.5)
                     .fixedSize(horizontal: false, vertical: true)
             }
