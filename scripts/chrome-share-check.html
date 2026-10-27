@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Tyto · Chrome 共享测试</title>
+<body style="font: 14px -apple-system, sans-serif; margin: 16px">
+<pre id="log">正在共享屏幕…</pre>
+<script>
+// 用 getDisplayMedia 共享整个屏幕（Google Meet 网页版就是这么做的），
+// 取两秒后的一帧，数一数悬浮窗和对照窗口区域里的品红色像素，结果 POST 回 /result。
+const query = new URLSearchParams(location.search);
+const box = name => query.get(name).split(',').map(Number);
+
+async function main() {
+  const report = { userAgent: navigator.userAgent };
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { displaySurface: 'monitor', width: { ideal: 8192 }, height: { ideal: 8192 } },
+      audio: false,
+    });
+    const track = stream.getVideoTracks()[0];
+    report.trackLabel = track.label;
+    report.trackSettings = track.getSettings();
+
+    const video = document.createElement('video');
+    video.muted = true;
+    video.srcObject = stream;
+    await video.play();
+    await new Promise(resolve => setTimeout(resolve, 2500));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.drawImage(video, 0, 0);
+    track.stop();
+
+    const scale = canvas.width / Number(query.get('screenWidth'));
+    const magenta = ([x, y, w, h]) => {
+      const data = context.getImageData(Math.round(x * scale), Math.round(y * scale),
+                                        Math.round(w * scale), Math.round(h * scale)).data;
+      let hits = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i] > 200 && data[i + 2] > 200 && data[i + 1] < 70) hits++;
+      }
+      return hits;
+    };
+    report.frameSize = [canvas.width, canvas.height];
+    report.expectedMarkerPixels = Math.round(40 * scale) ** 2;
+    report.overlayHits = magenta(box('overlay'));
+    report.controlHits = magenta(box('control'));
+    report.png = canvas.toDataURL('image/png');
+  } catch (error) {
+    report.error = String(error);
+  }
+  await fetch('/result', { method: 'POST', body: JSON.stringify(report) });
+  document.getElementById('log').textContent = '完成，可以关掉这个窗口。';
+}
+main();
+</script>

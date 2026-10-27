@@ -110,6 +110,28 @@ final class CheckModel: ObservableObject {
         writeReport(to: folder)
     }
 
+    /// 把两个窗口在屏幕里的位置写到 share-check/windows.json，给 scripts/chrome-share-check.sh 用。
+    /// 坐标以所在屏幕左上角为原点，单位是点。
+    func writeWindowFrames() {
+        guard let overlay, let controlWindow, let screen = overlay.screen else { return }
+        func local(_ rect: CGRect) -> [Double] {
+            [rect.minX - screen.frame.minX, screen.frame.maxY - rect.maxY, rect.width, rect.height].map { Double($0) }
+        }
+        let frames: [String: Any] = [
+            "screenIndex": (NSScreen.screens.firstIndex(of: screen) ?? 0) + 1,
+            "screenWidth": screen.frame.width,
+            "screenHeight": screen.frame.height,
+            "overlay": local(overlay.frame),
+            "control": local(controlWindow.frame),
+            "overlayProtected": protectOverlay,
+        ]
+        let url = URL.applicationSupportDirectory.appending(path: "Tyto/share-check/windows.json")
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let data = try? JSONSerialization.data(withJSONObject: frames, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: url)
+        }
+    }
+
     func openOutputFolder() {
         if let lastOutputFolder { NSWorkspace.shared.open(lastOutputFolder) }
     }

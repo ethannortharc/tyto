@@ -178,8 +178,10 @@ enum ImageFile {
         guard CGImageDestinationFinalize(destination) else { throw ScreenGrabError.cannotWriteImage }
     }
 
+    /// 立即解码：调用方读完会删掉文件，不能等用到时再去读。
     static func read(at url: URL) -> CGImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+        let options = [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+        return CGImageSourceCreateImageAtIndex(source, 0, options)
     }
 }

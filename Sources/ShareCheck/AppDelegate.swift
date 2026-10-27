@@ -11,7 +11,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         installMenu()
 
-        let overlay = OverlayPanel(model: model)
+        // --screen N：窗口开在第 N 块屏幕上（1 是主屏）。不给就开在当前活动的屏幕上。
+        let screen = Self.requestedScreen()
+        let overlay = OverlayPanel(model: model, screen: screen)
         overlay.orderFrontRegardless()
         self.overlay = overlay
 
@@ -23,14 +25,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         control.isReleasedWhenClosed = false
         control.contentView = NSHostingView(rootView: ControlView(model: model))
         // 放在屏幕左上，和右上角的悬浮窗分开，自检时两块标记不会重叠
-        if let area = NSScreen.main?.visibleFrame {
+        if let area = (screen ?? NSScreen.main)?.visibleFrame {
             control.setFrameTopLeftPoint(NSPoint(x: area.minX + 40, y: area.maxY - 40))
         }
         control.makeKeyAndOrderFront(nil)
+        // 从终端启动时系统可能不让 app 抢到前台，窗口就会压在别的窗口下面；这里强制提到最前
+        control.orderFrontRegardless()
         controlWindow = control
 
         model.overlay = overlay
         model.controlWindow = control
+        // --no-protect：关掉共享保护启动，用来确认自检真的能认出"被截到"
+        if CommandLine.arguments.contains("--no-protect") {
+            model.protectOverlay = false
+        }
+        model.writeWindowFrames()
         NSApp.activate()
 
         // 命令行：open build/TytoShareCheck.app --args --self-check
@@ -42,6 +51,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.terminate(nil)
             }
         }
+    }
+
+    private static func requestedScreen() -> NSScreen? {
+        let arguments = CommandLine.arguments
+        guard let flag = arguments.firstIndex(of: "--screen"), flag + 1 < arguments.count,
+              let number = Int(arguments[flag + 1]), NSScreen.screens.indices.contains(number - 1)
+        else { return nil }
+        return NSScreen.screens[number - 1]
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

@@ -65,6 +65,13 @@ struct PixelRegion {
 ///   门槛太高，标记被别的窗口挡住一部分时会漏报，让人误以为"隐藏成功"。
 ///   对这个工具来说，哪种错更要不得？
 func markerVisible(in region: PixelRegion) -> Bool? {
-    // TODO(Ethan): 在这里写判断，5～10 行。
-    return nil
+    guard region.pixelCount > 0, region.expectedMarkerPixels > 0 else { return nil }
+    var hits = 0
+    for index in 0..<region.pixelCount {
+        let pixel = region.rgb(at: index)
+        // 红、蓝都高，绿低。实测截图里是精确的 (255, 0, 255)，容差留给视频流的色彩转换。
+        if pixel.r > 200, pixel.b > 200, pixel.g < 70 { hits += 1 }
+    }
+    // 露出四分之一就算看见：宁可误报"被截到"，也不能把露出来的窗口判成"隐藏成功"。
+    return hits * 4 >= region.expectedMarkerPixels
 }

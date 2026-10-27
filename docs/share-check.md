@@ -29,6 +29,8 @@ open build/TytoShareCheck.app
 
 第一次点会要求屏幕录制权限：系统设置 → 隐私与安全性 → 录屏与系统录音 → 打开"Tyto 共享测试"，然后退出 app 重开，再点一次。
 
+还可以用 `--no-protect` 关掉共享保护再自检，这时每种方式都应该报"❌ 被截到"——用来确认自检本身认得出被截到的情况。
+
 截图和 `report.json` 存在 `~/Library/Application Support/Tyto/share-check/<时间>/`，最近一次的结果另存一份 `latest.json`。也可以在命令行里跑：`open build/TytoShareCheck.app --args --self-check`，跑完自动退出。
 
 每种方式的结果：
@@ -37,7 +39,16 @@ open build/TytoShareCheck.app
 - ❌ 悬浮窗被截到了。
 - 无效：截图里连对照窗口都没有，多半是没给屏幕录制权限。
 
-## 二、会议软件实测
+## 二、Chrome 共享屏幕（不用开会）
+
+```bash
+scripts/chrome-share-check.sh             # 共享保护开
+scripts/chrome-share-check.sh --no-protect   # 反向验证
+```
+
+临时开一个独立的 Chrome，用 `getDisplayMedia` 共享主屏（Google Meet 网页版和 Zoom、Teams 网页版都走这条路），取一帧看悬浮窗在不在。需要 Chrome 有屏幕录制权限：系统设置 → 隐私与安全性 → 录屏与系统录音 → 打开 Google Chrome。
+
+## 三、会议软件实测
 
 本机自检只能说明这几种截屏方式的结果，会议软件内部怎么截屏只有实测才知道。
 
@@ -51,13 +62,18 @@ open build/TytoShareCheck.app
 
 对方看到的时钟和本机一致，说明画面是实时的。另外在本机看一下：会议软件全屏时，悬浮窗还在不在最上面。
 
-Google Meet 在 Chrome 和 Safari 里各测一次，两个浏览器截屏的实现不一样。会议软件的共享设置里如果有"截屏方式"之类的选项，把当前选的是哪个记下来。
+本机装的会议软件是飞书（Lark）。Google Meet 在 Chrome 和 Safari 里各测一次，两个浏览器截屏的实现不一样。会议软件的共享设置里如果有"截屏方式"之类的选项，把当前选的是哪个记下来。
 
 ## 结果记录
 
 | 日期 | macOS | 会议软件及版本 | 共享方式 | 共享保护 | 对方看到对照窗口 | 对方看到悬浮窗 | 备注 |
 |---|---|---|---|---|---|---|---|
 | 2026-10-26 | 26.5.2 | `screencapture` 命令（终端里跑） | 整屏 | 开 | 是 | 否 | 对照窗口区域品红像素 6400/6400，悬浮窗区域 0 |
+| 2026-10-26 | 26.5.2 | 本机自检：ScreenCaptureKit 截图 ×2、视频流、screencapture | 整屏 | 开 | 是 | 否 | 四种都 ✅ |
+| 2026-10-26 | 26.5.2 | 本机自检（`--no-protect` 反向验证） | 整屏 | 关 | 是 | 是 | 四种都 ❌，说明自检认得出被截到 |
+| 2026-10-26 | 26.5.2 | Chrome 156 `getDisplayMedia` | 整屏 | 开 | | | 没测成：Chrome 没有屏幕录制权限（NotReadableError） |
+| | | 飞书 Lark | 整屏 | 开 | | | |
+| | | 飞书 Lark | 整屏 | 关 | | | |
 | | | Zoom | 整屏 | 开 | | | |
 | | | Zoom | 整屏 | 关 | | | |
 | | | Zoom | 单个窗口 | 开 | | | |

@@ -18,7 +18,7 @@ struct MarkerSquare: View {
 final class OverlayPanel: NSPanel {
     static let contentSize = NSSize(width: 460, height: 150)
 
-    init(model: CheckModel) {
+    init(model: CheckModel, screen: NSScreen?) {
         super.init(
             contentRect: NSRect(origin: .zero, size: Self.contentSize),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -26,14 +26,15 @@ final class OverlayPanel: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
-        level = .floating
+        // 比普通的置顶窗口（.floating）再高一层，会议软件的浮动工具条也盖不住它
+        level = .statusBar
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         hidesOnDeactivate = false
         isMovableByWindowBackground = true
         sharingType = .none
         contentView = NSHostingView(rootView: OverlayView(model: model))
 
-        if let screen = NSScreen.main {
+        if let screen = screen ?? NSScreen.main {
             let area = screen.visibleFrame
             setFrameOrigin(NSPoint(x: area.maxX - Self.contentSize.width - 32,
                                    y: area.maxY - Self.contentSize.height - 32))
