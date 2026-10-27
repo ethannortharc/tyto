@@ -2,13 +2,20 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Tyto</string>
+	<key>CFBundleExecutable</key>
+	<string>Tyto</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.giomni.tyto</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>zh-Hans</string>
+	</array>
 	<key>CFBundleName</key>
-	<string>Tyto</string>
-	<key>CFBundleDisplayName</key>
-	<string>Tyto 听译</string>
-	<key>CFBundleExecutable</key>
 	<string>Tyto</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
@@ -20,23 +27,22 @@
 	<string>26.0</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSHighResolutionCapable</key>
-	<true/>
-	<key>NSPrincipalClass</key>
-	<string>NSApplication</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Tyto 用麦克风听会议室里的说话声（包括你自己），转成文字。</string>
-	<key>NSAudioCaptureUsageDescription</key>
-	<string>Tyto 录制系统声音，把会议软件里对方说的话转成文字。</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Tyto 在本机把语音转成文字。</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<!-- 允许连本机的 http 服务（Ollama、LM Studio） -->
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Tyto records system audio to caption what people say in your meeting app.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Ethan H.B. Zhou</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Tyto listens to the microphone (you and others in the room) to turn speech into captions.</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Tyto turns speech into text on this Mac.</string>
 </dict>
 </plist>

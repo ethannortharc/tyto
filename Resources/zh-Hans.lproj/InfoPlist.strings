@@ -1,0 +1,5 @@
+/* 系统权限弹窗里的说明（macOS 语言是中文时显示） */
+"CFBundleDisplayName" = "Tyto 听译";
+"NSMicrophoneUsageDescription" = "Tyto 用麦克风听会议室里的说话声（包括你自己），转成文字。";
+"NSAudioCaptureUsageDescription" = "Tyto 录制系统声音，把会议软件里对方说的话转成文字。";
+"NSSpeechRecognitionUsageDescription" = "Tyto 在本机把语音转成文字。";

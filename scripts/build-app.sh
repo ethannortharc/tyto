@@ -21,6 +21,11 @@ rm -rf "$app"
 mkdir -p "$app/Contents/MacOS"
 cp "$bin" "$app/Contents/MacOS/$product"
 cp "Resources/$product-Info.plist" "$app/Contents/Info.plist"
+# 权限弹窗、显示名的中英文（只有 Tyto 有）
+if [ "$product" = Tyto ]; then
+  mkdir -p "$app/Contents/Resources"
+  cp -R Resources/*.lproj "$app/Contents/Resources/"
+fi
 
 identity="${TYTO_SIGN_IDENTITY:-Apple Development}"
 if ! codesign --force --sign "$identity" "$app" 2>/dev/null; then

@@ -1,0 +1,5 @@
+/* Permission prompts and display name (shown when macOS is in English) */
+"CFBundleDisplayName" = "Tyto";
+"NSMicrophoneUsageDescription" = "Tyto listens to the microphone (you and others in the room) to turn speech into captions.";
+"NSAudioCaptureUsageDescription" = "Tyto records system audio to caption what people say in your meeting app.";
+"NSSpeechRecognitionUsageDescription" = "Tyto turns speech into text on this Mac.";

@@ -17,6 +17,8 @@ app="dist/Tyto.app"
 mkdir -p "$app/Contents/MacOS"
 cp "$bin" "$app/Contents/MacOS/Tyto"
 cp Resources/Tyto-Info.plist "$app/Contents/Info.plist"
+mkdir -p "$app/Contents/Resources"
+cp -R Resources/*.lproj "$app/Contents/Resources/"
 
 echo "==> 签名：$identity"
 codesign --force --options runtime --timestamp --entitlements Resources/Tyto.entitlements --sign "$identity" "$app"
