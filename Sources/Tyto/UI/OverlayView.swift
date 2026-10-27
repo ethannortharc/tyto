@@ -10,7 +10,7 @@ struct OverlayActions {
     var openTranslation: () -> Void = {}
 }
 
-/// 悬浮窗：顶部控制栏，中间是原文/译文对照的字幕，底部是回复。
+/// 悬浮窗：顶部控制栏，中间是原文/译文对照的字幕，底部是回复按钮。生成的回复在旁边的回复面板里（SidecarView）。
 struct OverlayView: View {
     @ObservedObject var session: SessionModel
     @ObservedObject var settings: SettingsStore
@@ -19,30 +19,17 @@ struct OverlayView: View {
     /// 画预览图时为 true：ImageRenderer 画不出 ScrollView 和系统玻璃，换成普通排列和纯色底
     var flatForPreview = false
 
-    @State private var shownReplyID: UUID?
-    @State private var replyCollapsed = false
     @State private var showAppearance = false
 
-    private var theme: OverlayTheme { OverlayTheme.of(settings.value.theme, light: lightAppearance) }
-
-    /// 黑字配浅色玻璃：手动选了黑字，或者自动且悬浮窗后面的画面是亮的
-    private var lightAppearance: Bool {
-        switch settings.value.overlayTextColor {
-        case .auto: ui.backdropIsLight
-        case .white: false
-        case .black: true
-        }
-    }
+    private var theme: OverlayTheme { OverlayTheme.current(settings.value, backdropIsLight: ui.backdropIsLight) }
 
     var body: some View {
-        GeometryReader { geometry in
-            content(height: geometry.size.height)
-        }
-        // 换界面语言时整棵重建，文字立即全部换过来
-        .id(settings.value.language)
+        content
+            // 换界面语言时整棵重建，文字立即全部换过来
+            .id(settings.value.language)
     }
 
-    private func content(height: CGFloat) -> some View {
+    private var content: some View {
         VStack(spacing: 0) {
             header
             Hairline(ink: theme.ink)
@@ -50,20 +37,10 @@ struct OverlayView: View {
                 transcript
                 if let notice = session.notice { noticeBanner(notice) }
             }
-            footer(height: height)
+            footer
         }
         .font(.system(size: settings.value.fontSize))
-        .foregroundStyle(theme.ink)
-        // 底色调得很淡时，文字加一圈细阴影（黑字时是白晕），盖在花的画面上也看得清
-        .shadow(color: theme.halo.opacity(GlassBackground.textShadow(settings.value.overlayOpacity)), radius: 1.4, y: 0.5)
-        .background(GlassBackground(theme: theme, opacity: settings.value.overlayOpacity, flat: flatForPreview))
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .environment(\.colorScheme, lightAppearance ? .light : .dark)
-        .tint(theme.accent)
-        .onChange(of: session.replies.count) {
-            shownReplyID = session.replies.last?.id
-            replyCollapsed = false
-        }
+        .overlaySurface(theme: theme, opacity: settings.value.overlayOpacity, flat: flatForPreview)
     }
 
     // MARK: - 顶部控制栏
@@ -205,19 +182,32 @@ struct OverlayView: View {
         if session.rows.isEmpty {
             emptyState
         } else if flatForPreview {
-            transcriptRows.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top).clipped()
+            // 内容放在上面一层，多了从下面裁掉，不把悬浮窗撑高
+            Color.clear.overlay(alignment: .top) { transcriptRows }.clipped()
         } else {
-            ScrollView { transcriptRows }
-                // 内容少时从顶部排；变长后贴着底部、自动跟到最新一句
-                .defaultScrollAnchor(.top, for: .alignment)
-                .defaultScrollAnchor(.bottom, for: .initialOffset)
-                .defaultScrollAnchor(.bottom, for: .sizeChanges)
+            ScrollViewReader { proxy in
+                ScrollView { transcriptRows }
+                    // 内容少时从顶部排；变长后贴着底部、自动跟到最新一句
+                    .defaultScrollAnchor(.top, for: .alignment)
+                    .defaultScrollAnchor(.bottom, for: .initialOffset)
+                    .defaultScrollAnchor(.bottom, for: .sizeChanges)
+                    // 回复面板里点了"回的是哪句"：滚过去，闪一下
+                    .onChange(of: ui.focusRowID) {
+                        guard let id = ui.focusRowID else { return }
+                        withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .center) }
+                        Task {
+                            try? await Task.sleep(for: .seconds(1.6))
+                            if ui.focusRowID == id { ui.focusRowID = nil }
+                        }
+                    }
+            }
         }
     }
 
     private var transcriptRows: some View {
         let rows = session.rows
         let keywords = session.keywordList
+        let answered = session.answeredRows
         return LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                 RowView(row: row, session: session, theme: theme, keywords: keywords,
@@ -226,7 +216,13 @@ struct OverlayView: View {
                         endsGroup: index == rows.count - 1 || Self.startsGroup(rows, index + 1),
                         showTranslation: settings.value.translationEnabled,
                         selected: session.selection.contains(row.id),
-                        fontSize: settings.value.fontSize)
+                        flashed: ui.focusRowID == row.id,
+                        answers: answered[row.id],
+                        fontSize: settings.value.fontSize,
+                        showReply: { id in
+                            settings.value.showReplyPanel = true
+                            ui.focusReplyID = id
+                        })
                     .transition(.opacity.combined(with: .offset(y: 8)))
             }
         }
@@ -273,53 +269,23 @@ struct OverlayView: View {
 
     // MARK: - 底部：回复
 
-    /// 回复区最高占窗口的四成（没有字幕时，比如只用截屏回复，可以占到六成五）
-    private func footer(height: CGFloat) -> some View {
-        VStack(spacing: 10) {
-            if let reply = shownReply, !replyCollapsed {
-                ReplyCard(reply: reply, session: session, theme: theme, flat: flatForPreview,
-                          maxHeight: max(120, height * (session.rows.isEmpty ? 0.65 : 0.4) - 60))
+    /// 底部：回复按钮；右边是回复面板的开关和条数
+    private var footer: some View {
+        HStack(spacing: 8) {
+            PillButton(title: session.selection.isEmpty ? tr("回复最近的话", "Reply to Latest") : tr("回复选中的 \(session.selection.count) 句", "Reply to \(session.selection.count) Selected"),
+                       symbol: "arrowshape.turn.up.left.fill", prominent: true, theme: theme, help: "⌃⌥R") {
+                session.reply(to: session.selection.isEmpty ? nil : Array(session.selection))
             }
-            HStack(spacing: 8) {
-                PillButton(title: session.selection.isEmpty ? tr("回复最近的话", "Reply to Latest") : tr("回复选中的 \(session.selection.count) 句", "Reply to \(session.selection.count) Selected"),
-                           symbol: "arrowshape.turn.up.left.fill", prominent: true, theme: theme, help: "⌃⌥R") {
-                    session.reply(to: session.selection.isEmpty ? nil : Array(session.selection))
-                }
-                if !session.selection.isEmpty {
-                    PillButton(title: tr("清除选择", "Clear Selection"), theme: theme) { session.selection = [] }
-                }
-                Spacer(minLength: 0)
-                if let reply = shownReply { replyNavigation(reply) }
+            if !session.selection.isEmpty {
+                PillButton(title: tr("清除选择", "Clear Selection"), theme: theme) { session.selection = [] }
+            }
+            Spacer(minLength: 0)
+            PanelToggle(count: session.replies.count, on: settings.value.showReplyPanel, theme: theme) {
+                settings.value.showReplyPanel.toggle()
             }
         }
         .padding(12)
         .overlay(alignment: .top) { Hairline(ink: theme.ink) }
-    }
-
-    private var shownReply: Reply? {
-        session.replies.first { $0.id == shownReplyID } ?? session.replies.last
-    }
-
-    @ViewBuilder
-    private func replyNavigation(_ reply: Reply) -> some View {
-        let index = session.replies.firstIndex { $0.id == reply.id } ?? 0
-        HStack(spacing: 2) {
-            if session.replies.count > 1 {
-                IconButton(symbol: "chevron.left", theme: theme, help: tr("上一条回复", "Previous Reply"), size: 24) {
-                    shownReplyID = session.replies[max(0, index - 1)].id
-                }
-                .disabled(index == 0)
-                Text("\(index + 1)/\(session.replies.count)")
-                    .font(.system(size: 11, weight: .medium).monospacedDigit())
-                    .foregroundStyle(theme.ink.opacity(0.5))
-                IconButton(symbol: "chevron.right", theme: theme, help: tr("下一条回复", "Next Reply"), size: 24) {
-                    shownReplyID = session.replies[min(session.replies.count - 1, index + 1)].id
-                }
-                .disabled(index == session.replies.count - 1)
-            }
-            IconButton(symbol: replyCollapsed ? "chevron.up" : "chevron.down", theme: theme,
-                       help: replyCollapsed ? tr("展开回复", "Show Reply") : tr("收起回复", "Hide Reply"), size: 24) { replyCollapsed.toggle() }
-        }
     }
 }
 
@@ -331,11 +297,15 @@ final class OverlayState: ObservableObject {
     @Published var peeking = false
     /// 悬浮窗后面的画面是亮的（字色自动时换黑字），由 BackdropProbe 定时看一眼
     @Published var backdropIsLight = false
+    /// 字幕里要滚到并闪一下的那一句（回复面板里点了"回的是哪句"）
+    @Published var focusRowID: UUID?
+    /// 回复面板里要滚到的那条回复（字幕里点了"回应了建议"的小图标）
+    @Published var focusReplyID: UUID?
 }
 
 // MARK: - 小部件
 
-private struct Hairline: View {
+struct Hairline: View {
     let ink: Color
 
     var body: some View {
@@ -421,6 +391,33 @@ private struct SourceDot: View {
     }
 }
 
+/// 回复面板的开关：图标 + 条数，打开时用强调色
+private struct PanelToggle: View {
+    let count: Int
+    let on: Bool
+    let theme: OverlayTheme
+    let action: () -> Void
+
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: "sidebar.left").font(.system(size: 11.5, weight: .medium))
+                Text(count > 0 ? tr("回复 \(count)", "Replies \(count)") : tr("回复", "Replies"))
+                    .font(.system(size: 11.5, weight: .semibold).monospacedDigit())
+            }
+            .foregroundStyle(on ? theme.accent : theme.ink.opacity(hovered ? 1 : 0.8))
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .background(Capsule().fill(on ? theme.accent.opacity(theme.light ? 0.14 : 0.18) : theme.ink.opacity(hovered ? 0.12 : 0.07)))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+        .help(on ? tr("收起回复面板（⌃⌥B）", "Hide Replies (⌃⌥B)") : tr("打开回复面板（⌃⌥B）", "Show Replies (⌃⌥B)"))
+    }
+}
+
 struct IconButton: View {
     let symbol: String
     var active = false
@@ -492,7 +489,12 @@ private struct RowView: View {
     let endsGroup: Bool
     let showTranslation: Bool
     let selected: Bool
+    /// 回复面板里点了"回的是哪句"，这一句闪一下
+    let flashed: Bool
+    /// 这一句是在回应哪条回复建议（"我实际说的"）
+    let answers: UUID?
     let fontSize: Double
+    let showReply: (UUID) -> Void
 
     @State private var hovered = false
     @State private var renaming = false
@@ -506,10 +508,22 @@ private struct RowView: View {
         VStack(alignment: .leading, spacing: 5) {
             if showHeader { header }
             VStack(alignment: .leading, spacing: 3) {
-                Text(originalText)
-                    .font(.system(size: fontSize + 1))
-                    .lineSpacing(fontSize * 0.22)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(originalText)
+                        .font(.system(size: fontSize + 1))
+                        .lineSpacing(fontSize * 0.22)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let answers {
+                        Spacer(minLength: 0)
+                        Button { showReply(answers) } label: {
+                            Image(systemName: "text.bubble")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(theme.accent.opacity(0.85))
+                        }
+                        .buttonStyle(.plain)
+                        .help(tr("这句在回应一条回复建议，点一下看对比", "This answers a suggested reply; click to compare"))
+                    }
+                }
                 if showTranslation, let translation = row.translation {
                     Text(Highlighter.text(translation, keywords: keywords, theme: theme,
                                           base: theme.translation.opacity(theme.light ? 0.92 : 0.8), entities: false))
@@ -529,7 +543,8 @@ private struct RowView: View {
         .background(alignment: .leading) {
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(selected ? theme.accent.opacity(theme.light ? 0.10 : 0.14) : hovered ? theme.ink.opacity(0.05) : .clear)
+                    .fill(selected || flashed ? theme.accent.opacity(theme.light ? 0.10 : 0.14) : hovered ? theme.ink.opacity(0.05) : .clear)
+                    .animation(.easeOut(duration: 0.3), value: flashed)
                     .padding(.horizontal, 6)
                 if style == .bar {
                     // 一个人连着说的几句共用一条线，不再一句一段
@@ -633,149 +648,6 @@ private struct RowView: View {
     private func commitRename() {
         session.rename(row.speakerKey, to: newName)
         renaming = false
-    }
-}
-
-// MARK: - 回复卡片
-
-private struct ReplyCard: View {
-    let reply: Reply
-    @ObservedObject var session: SessionModel
-    let theme: OverlayTheme
-    let flat: Bool
-    let maxHeight: CGFloat
-
-    @State private var instruction = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            heading
-            if let status = reply.status {
-                Text(status).font(.system(size: 12)).foregroundStyle(theme.ink.opacity(0.6))
-            }
-            if flat {
-                sections
-            } else {
-                ScrollView { sections }
-                    .frame(maxHeight: maxHeight)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if let error = reply.error {
-                Text(error).font(.system(size: 11.5)).foregroundStyle(.orange)
-            }
-            if reply.isScreenshot, !reply.isStreaming, session.canRegenerate(reply.id) || flat {
-                regenerate
-            }
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(theme.ink.opacity(0.06)))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(theme.ink.opacity(0.09)))
-        .onAppear { instruction = reply.instruction ?? "" }
-    }
-
-    private var heading: some View {
-        HStack(spacing: 10) {
-            if let data = reply.thumbnail, let image = NSImage(data: data) {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 38, height: 38)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.ink.opacity(0.15)))
-            } else {
-                Image(systemName: "text.bubble")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(theme.accent)
-                    .frame(width: 26, height: 26)
-                    .background(Circle().fill(theme.accent.opacity(0.12)))
-            }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(reply.isScreenshot ? tr("截屏回复", "Screenshot Reply") : tr("回复建议", "Suggested Reply")).font(.system(size: 12.5, weight: .semibold))
-                Text("\(reply.target) · \(reply.createdAt.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute()))")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(theme.ink.opacity(0.45))
-            }
-            Spacer(minLength: 0)
-            if reply.isStreaming {
-                ProgressView().controlSize(.mini)
-                PillButton(title: tr("停止", "Stop"), theme: theme, action: session.stopReply)
-            } else if reply.isScreenshot, let copied = reply.copiedSection {
-                Label(tr("已复制「\(copied)」· ⌘V 粘贴", "Copied “\(copied)” · ⌘V"), systemImage: "checkmark.circle.fill")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(theme.accent)
-                    .lineLimit(1)
-            }
-        }
-    }
-
-    private var sections: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(ReplyFormat.sections(reply.text)) { section in
-                if section.isCopyable {
-                    copyable(section)
-                } else {
-                    VStack(alignment: .leading, spacing: 3) {
-                        if !section.title.isEmpty {
-                            Text(section.title)
-                                .font(.system(size: 10.5, weight: .semibold))
-                                .tracking(0.5)
-                                .foregroundStyle(theme.ink.opacity(0.5))
-                        }
-                        Text(section.body)
-                            .font(.system(size: 12.5))
-                            .foregroundStyle(theme.ink.opacity(0.82))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-        }
-        .textSelection(.enabled)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func copyable(_ section: ReplySection) -> some View {
-        let copied = reply.copiedSection == section.title
-        return VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text(section.title)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .tracking(0.5)
-                    .foregroundStyle(theme.accent)
-                Spacer()
-                Button { session.copy(section, of: reply.id) } label: {
-                    Label(copied ? tr("已复制", "Copied") : tr("复制", "Copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(copied ? theme.accent : theme.ink.opacity(0.7))
-                }
-                .buttonStyle(.plain)
-            }
-            Text(section.body)
-                .font(.system(size: 14))
-                .foregroundStyle(theme.ink.opacity(0.96))
-                .lineSpacing(2)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(10)
-        .padding(.leading, 4)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.accent.opacity(copied ? 0.14 : 0.08)))
-        .overlay(alignment: .leading) {
-            Capsule().fill(theme.accent.opacity(0.85)).frame(width: 3).padding(.vertical, 10).padding(.leading, 5)
-        }
-    }
-
-    private var regenerate: some View {
-        HStack(spacing: 8) {
-            TextField(tr("想怎么回？比如：婉拒、用中文、更正式", "How to reply? e.g. decline, in English, more formal"), text: $instruction)
-                .textFieldStyle(.plain)
-                .font(.system(size: 12))
-                .padding(.horizontal, 10)
-                .frame(height: 28)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.ink.opacity(0.07)))
-                .onSubmit { session.regenerateScreenshotReply(reply.id, instruction: instruction) }
-            PillButton(title: tr("重新生成", "Regenerate"), symbol: "arrow.clockwise", theme: theme) {
-                session.regenerateScreenshotReply(reply.id, instruction: instruction)
-            }
-        }
     }
 }
 

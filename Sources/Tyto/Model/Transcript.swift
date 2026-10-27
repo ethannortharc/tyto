@@ -79,6 +79,11 @@ struct Reply: Identifiable, Codable, Equatable {
     var status: String?
     /// 已经放进剪贴板的那一段的标题
     var copiedSection: String?
+    /// 针对的是哪几句字幕（找"我实际说的"用）；截屏回复和老记录里没有
+    var targetIDs: [UUID]?
+    /// 针对的那几句的原话和说话人，字幕被清掉以后也能显示
+    var quote: String?
+    var quoteSpeaker: String?
 
     var isScreenshot: Bool { source == "screenshot" }
 

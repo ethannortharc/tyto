@@ -395,7 +395,10 @@ final class SessionModel: ObservableObject {
             replies[previous].isStreaming = false
             replies[previous].error = tr("被新的回复打断", "Interrupted by a new reply")
         }
-        let reply = Reply(target: ids == nil ? tr("最近的话", "Latest") : tr("选中的 \(targets.count) 句", "\(targets.count) selected"))
+        var reply = Reply(target: ids == nil ? tr("最近的话", "Latest") : tr("选中的 \(targets.count) 句", "\(targets.count) selected"))
+        reply.targetIDs = targets.map(\.id)
+        reply.quote = targets.map(\.displayText).reduce("") { TextJoin.join($0, $1) }
+        reply.quoteSpeaker = speakerLabel(last)
         replies.append(reply)
         let replyID = reply.id
         replyTask = Task { [weak self] in
@@ -417,6 +420,37 @@ final class SessionModel: ObservableObject {
 
     func stopReply() {
         replyTask?.cancel()
+    }
+
+    /// 删掉一条回复（正在生成的先停下）
+    func deleteReply(_ id: UUID) {
+        if replies.last?.id == id, replies.last?.isStreaming == true { replyTask?.cancel() }
+        replies.removeAll { $0.id == id }
+        screenshotImages[id] = nil
+        scheduleSave()
+    }
+
+    /// 算作"我"的本地说话人：改名成「我」/ Me 的；一个都没有时是整个本地麦克风
+    var meSpeakerKeys: Set<String> {
+        Set(speakerNames.filter { key, name in
+            key.hasPrefix("\(Channel.local.rawValue):")
+                && ["我", "me", "myself", "自己"].contains(name.trimmingCharacters(in: .whitespaces).lowercased())
+        }.keys)
+    }
+
+    /// 这条回复建议之后我实际说了什么
+    func followUp(for reply: Reply) -> ReplyFollowUp? {
+        FollowUp.find(for: reply, in: rows, me: meSpeakerKeys)
+    }
+
+    /// 哪些字幕是在回应某条回复建议（字幕 id → 回复 id），字幕旁边显示一个小图标
+    var answeredRows: [UUID: UUID] {
+        let me = meSpeakerKeys
+        var result: [UUID: UUID] = [:]
+        for reply in replies {
+            for row in FollowUp.find(for: reply, in: rows, me: me)?.rows ?? [] { result[row.id] = reply.id }
+        }
+        return result
     }
 
     /// "最近的话"：最后一次本地发言之后远端说的话（最多 3 句）；没有就取最后 2 句
@@ -681,7 +715,15 @@ final class SessionModel: ObservableObject {
         if !replies.isEmpty {
             text += tr("\n## 回复建议\n", "\n## Suggested Replies\n")
             for reply in replies {
-                text += "\n### \(formatter.string(from: reply.createdAt)) · \(reply.target)\n\n\(reply.text)\n"
+                text += "\n### \(formatter.string(from: reply.createdAt)) · \(reply.target)\n\n"
+                if let quote = reply.quote {
+                    text += "> \(reply.quoteSpeaker.map { "**\($0)**：" } ?? "")\(quote)\n\n"
+                }
+                text += "\(reply.text)\n"
+                if let followUp = followUp(for: reply), !followUp.rows.isEmpty {
+                    text += tr("\n**我实际说的**（\(followUp.verdict.label)）：\(followUp.text)\n",
+                               "\n**What I actually said** (\(followUp.verdict.label)): \(followUp.text)\n")
+                }
             }
         }
         return text

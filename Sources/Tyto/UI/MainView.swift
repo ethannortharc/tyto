@@ -1334,6 +1334,7 @@ private struct ShortcutsPage: View {
         (["⌃", "⌥", "S"], tr("截屏回复（按设置截最前面的 App 或整个屏幕）", "Screenshot Reply (frontmost app or entire screen, per settings)"), "camera.viewfinder"),
         (["⌃", "⌥", "A"], tr("截屏回复：框选一块", "Screenshot Reply: Select Area"), "rectangle.dashed"),
         (["⌃", "⌥", "T"], tr("显示 / 隐藏悬浮窗", "Show / Hide Overlay"), "macwindow"),
+        (["⌃", "⌥", "B"], tr("打开 / 收起回复面板", "Show / Hide Replies Panel"), "sidebar.left"),
         (["⌃", "⌥", "P"], tr("点击穿透开 / 关", "Click-Through On / Off"), "cursorarrow.motionlines"),
         (["⌃", "⌥", "Q"], tr("退出 Tyto", "Quit Tyto"), "power"),
     ]

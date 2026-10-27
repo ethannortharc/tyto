@@ -29,6 +29,7 @@ A floating meeting assistant for macOS. It turns what people say into live capti
 - **Two audio channels**: *remote* is the meeting app's sound (system audio), *local* is your microphone (you and anyone in the room). With cloud recognition, speakers are told apart as Speaker 1, 2, 3 — click a name to rename it "Me" or "Alice".
 - **Original and translation side by side**: pick your main language; lines in other languages get a smaller, fainter translation underneath, toggled with one click. Numbers, dates, amounts, names and your own keywords are highlighted; questions get a tag.
 - **One-click replies**: click a line, select several, or reply to "the latest". Replies use the meeting background and the skills you picked, in three parts: what they mean, what you can say, and a translation of your reply.
+- **Replies panel**: every reply stays in a column beside the overlay (⌃⌥B), newest first; delete any of them, and they are saved with the session. Under a meeting reply Tyto adds *What you said*: what the local speaker named "Me" said after that line and before the other side moved on, tagged *Followed*, *Rephrased* or *No reply*. Those captions get a small icon that jumps to the reply, and the exported notes include the comparison.
 - **Screenshot replies**: ⌃⌥S captures the frontmost app (say, a Teams chat), works out who is asking what, and writes three replies you can paste; the first is already on your clipboard.
 - **Bring any model**: configure each provider once, then choose a model for replies, vision, translation and transcription. Supports Anthropic, OpenAI, OpenRouter, Gemini, DeepSeek, Tongyi Qwen, SiliconFlow, Groq, Soniox, Deepgram, local Ollama / LM Studio, and any OpenAI-compatible endpoint.
 - **Looks**: macOS 26 Liquid Glass with three palettes; background from fully clear to deep; adjustable font size.
@@ -71,6 +72,7 @@ They work while the meeting app is in front.
 | ⌃⌥S | Screenshot reply (frontmost app, or whole screen if set) |
 | ⌃⌥A | Screenshot reply: select an area |
 | ⌃⌥T | Show / hide the overlay |
+| ⌃⌥B | Show / hide the replies panel |
 | ⌃⌥P | Click-through on / off (clicks go to the window below; hold ⌥ over the overlay to use it meanwhile) |
 | ⌃⌥Q | Quit |
 
@@ -182,6 +184,7 @@ Check each part without a meeting (arguments to `build/Tyto.app/Contents/MacOS/T
 | `--render-preview <dir>` / `--render-settings <dir>` | Draw the overlay / settings pages to images (no screen capture) |
 | `--selftest-glass <dir> [--light] [--auto]` | Real glass rendering (captures only Tyto's own windows); `--light` over a white page, `--auto` with the automatic text color |
 | `--selftest-backdrop` | Auto text color: measure a white page and a meeting backdrop, check white vs. black |
+| `--selftest-followup` | *What you said* after a suggested reply: which lines, followed / rephrased / no reply; which side the replies panel goes |
 
 Add `--settings-json '{...}'` to any of them to override settings without saving. The run log is at `~/Library/Logs/Tyto.log`.
 

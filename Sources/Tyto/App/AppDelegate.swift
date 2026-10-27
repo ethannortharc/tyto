@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let overlayState = OverlayState()
     private var overlay: OverlayPanel?
     private var backdropProbe: BackdropProbe?
+    private var sidecar: SidecarPanel?
+    private var lastReplyCount = 0
     private var mainWindow: NSWindow?
     private var statusItem: NSStatusItem?
     private let hotKeys = HotKeys()
@@ -36,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         overlay = panel
         backdropProbe = BackdropProbe(panel: panel, settings: settings, state: overlayState)
         backdropProbe?.start()
+        setupSidecar(beside: panel)
         overlayState.$clickThrough
             .sink { [weak self] _ in self?.updateClickThrough() }
             .store(in: &subscriptions)
@@ -101,6 +104,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func toggleOverlay() {
         guard let overlay else { return }
         if overlay.isVisible { overlay.orderOut(nil) } else { overlay.orderFrontRegardless() }
+        updateSidecar()
+    }
+
+    // MARK: - 回复面板
+
+    private func setupSidecar(beside overlay: OverlayPanel) {
+        let panel = SidecarPanel(rootView: SidecarView(session: session, settings: settings, ui: overlayState,
+                                                       close: { [weak self] in self?.settings.value.showReplyPanel = false }))
+        sidecar = panel
+        lastReplyCount = session.replies.count
+        // 悬浮窗改大小、拖到别处：面板跟着换高度，必要时换到另一边
+        for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
+            NotificationCenter.default.publisher(for: name, object: overlay)
+                .sink { [weak self] _ in self?.placeSidecar() }
+                .store(in: &subscriptions)
+        }
+        settings.$value.map(\.showReplyPanel).removeDuplicates()
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.updateSidecar() } }
+            .store(in: &subscriptions)
+        // 生成新回复时自动打开
+        session.$replies.map(\.count).removeDuplicates()
+            .sink { [weak self] count in
+                guard let self else { return }
+                if count > lastReplyCount, !settings.value.showReplyPanel { settings.value.showReplyPanel = true }
+                lastReplyCount = count
+            }
+            .store(in: &subscriptions)
+    }
+
+    /// 悬浮窗显示、且面板打开时才显示；作为子窗口贴在悬浮窗旁边，拖悬浮窗时一起走
+    private func updateSidecar() {
+        guard let overlay, let sidecar else { return }
+        if overlay.isVisible, settings.value.showReplyPanel {
+            placeSidecar()
+            if sidecar.parent == nil { overlay.addChildWindow(sidecar, ordered: .above) }
+            sidecar.orderFrontRegardless()
+        } else {
+            if sidecar.parent != nil { overlay.removeChildWindow(sidecar) }
+            sidecar.orderOut(nil)
+        }
+        updateClickThrough()
+    }
+
+    private func placeSidecar() {
+        guard let overlay, let sidecar, sidecar.isVisible || settings.value.showReplyPanel else { return }
+        sidecar.place(beside: overlay)
     }
 
     /// 点击穿透时鼠标会穿过悬浮窗，悬浮窗本身就点不了。按住 ⌥ 并把鼠标移到悬浮窗上，临时恢复可点，松开又穿透。
@@ -115,12 +164,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func updateClickThrough() {
         guard let overlay else { return }
-        let peeking = overlayState.clickThrough
-            && NSEvent.modifierFlags.contains(.option)
-            && overlay.frame.contains(NSEvent.mouseLocation)
+        let mouse = NSEvent.mouseLocation
+        let over = overlay.frame.contains(mouse) || (sidecar?.isVisible == true && sidecar?.frame.contains(mouse) == true)
+        let peeking = overlayState.clickThrough && NSEvent.modifierFlags.contains(.option) && over
         if overlayState.peeking != peeking { overlayState.peeking = peeking }
         let ignores = overlayState.clickThrough && !peeking
         if overlay.ignoresMouseEvents != ignores { overlay.ignoresMouseEvents = ignores }
+        if let sidecar, sidecar.ignoresMouseEvents != ignores { sidecar.ignoresMouseEvents = ignores }
     }
 
     /// 弹出来的小窗口（改名字的气泡等）是另建的窗口，不会自动继承"不被共享"；定时把本 app 所有窗口都设上。
@@ -184,6 +234,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let translation = item(tr("显示译文", "Show Translation"), "character.bubble", #selector(toggleTranslation))
         translation.state = current.translationEnabled ? .on : .off
         menu.addItem(translation)
+        let replies = item(tr("回复面板", "Replies Panel"), "sidebar.left", #selector(toggleSidecarAction), key: "b")
+        replies.state = current.showReplyPanel ? .on : .off
+        menu.addItem(replies)
         let clickThrough = item(tr("点击穿透", "Click-Through"), "cursorarrow.motionlines", #selector(toggleClickThrough), key: "p")
         clickThrough.state = overlayState.clickThrough ? .on : .off
         menu.addItem(clickThrough)
@@ -242,6 +295,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         session.translationToggled()
     }
     @objc private func toggleClickThrough() { overlayState.clickThrough.toggle() }
+    @objc private func toggleSidecarAction() { settings.value.showReplyPanel.toggle() }
     @objc private func openMainAction() { openMainWindow() }
     @objc private func quit() { NSApp.terminate(nil) }
     @objc private func about() {
@@ -266,6 +320,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotKeys.register(keyCode: kVK_ANSI_T, modifiers: modifiers) { [weak self] in self?.toggleOverlay() }
         hotKeys.register(keyCode: kVK_ANSI_R, modifiers: modifiers) { [weak self] in self?.reply() }
         hotKeys.register(keyCode: kVK_ANSI_P, modifiers: modifiers) { [weak self] in self?.overlayState.clickThrough.toggle() }
+        hotKeys.register(keyCode: kVK_ANSI_B, modifiers: modifiers) { [weak self] in self?.settings.value.showReplyPanel.toggle() }
         hotKeys.register(keyCode: kVK_ANSI_L, modifiers: modifiers) { [weak self] in self?.session.toggle() }
         hotKeys.register(keyCode: kVK_ANSI_S, modifiers: modifiers) { [weak self] in self?.screenshotReply() }
         hotKeys.register(keyCode: kVK_ANSI_A, modifiers: modifiers) { [weak self] in self?.screenshotReply(.region) }

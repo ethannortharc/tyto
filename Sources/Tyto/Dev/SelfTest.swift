@@ -20,6 +20,7 @@ import Foundation
 ///   Tyto --selftest-glass <文件夹> [--light]                               真实玻璃效果：悬浮窗盖在模拟会议画面（或白底页面）上，只截这两个窗口
 ///   Tyto --render-settings <文件夹>                                        把设置窗口每一页画成图片（窗口建在屏幕外，不截屏）
 ///   Tyto --render-preview <文件夹>                                         用示例数据把悬浮窗画成图片（不碰屏幕）
+///   Tyto --selftest-followup                                              回复建议之后"我实际说的"：找哪几句、判照着说/改了说法/没回
 ///   Tyto --selftest-backdrop                                              字色自动：在屏幕上放白底页面和会议画面，量亮度，看选白字还是黑字
 enum SelfTest {
     @MainActor
@@ -77,6 +78,9 @@ enum SelfTest {
             let appName = value(after: "--app")
             Task { exit(await screenshot(file: file, instruction: instruction, appName: appName, settings: current)) }
             return true
+        }
+        if arguments.contains("--selftest-followup") {
+            exit(followUp())
         }
         if arguments.contains("--selftest-backdrop") {
             Task { exit(await backdrop()) }
@@ -237,15 +241,17 @@ enum SelfTest {
     static func renderPreview(to folder: String, settings: SettingsStore) -> Int32 {
         let session = SampleData.session(settings: settings)
         let rows = SampleData.rows()
-        let meetingReply = SampleData.meetingReply()
+        let meetingReply = SampleData.meetingReply(answering: rows)
+        let sideReplies = [SampleData.screenshotReply(thumbnail: sampleThumbnail()), meetingReply]
 
         let folderURL = URL(filePath: folder)
         try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
         for theme in ThemeID.allCases {
             settings.value.theme = theme
             settings.value.overlayOpacity = AppSettings().overlayOpacity
-            session.showSample(rows: rows, replies: [meetingReply], selection: [rows[3].id])
-            guard render(session: session, settings: settings, to: folderURL.appending(path: "overlay-\(theme.rawValue).png"))
+            session.showSample(rows: rows, replies: sideReplies, selection: [rows[3].id])
+            guard render(session: session, settings: settings, sidecar: true,
+                         to: folderURL.appending(path: "overlay-\(theme.rawValue).png"))
             else { return 1 }
         }
 
@@ -253,7 +259,8 @@ enum SelfTest {
         for theme in ThemeID.allCases {
             settings.value.theme = theme
             session.showSample(rows: [], replies: [shot], selection: [])
-            guard render(session: session, settings: settings, to: folderURL.appending(path: "screenshot-reply-\(theme.rawValue).png"))
+            guard render(session: session, settings: settings, sidecar: true,
+                         to: folderURL.appending(path: "screenshot-reply-\(theme.rawValue).png"))
             else { return 1 }
         }
         // 两种字幕样式，盖在会议画面（白字）和白底页面（黑字）上
@@ -262,8 +269,8 @@ enum SelfTest {
         for transcriptStyle in TranscriptStyle.allCases {
             settings.value.transcriptStyle = transcriptStyle
             for light in [false, true] {
-                session.showSample(rows: rows, replies: [meetingReply], selection: [rows[3].id])
-                guard render(session: session, settings: settings, light: light,
+                session.showSample(rows: rows, replies: sideReplies, selection: [rows[3].id])
+                guard render(session: session, settings: settings, light: light, sidecar: true,
                              to: folderURL.appending(path: "style-\(transcriptStyle.rawValue)-\(light ? "light" : "dark").png"))
                 else { return 1 }
             }
@@ -450,6 +457,89 @@ enum SelfTest {
         return 0
     }
 
+    /// "我实际说的"：几种典型的对话，看找得对不对、判得对不对
+    @MainActor
+    static func followUp() -> Int32 {
+        let start = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        func row(_ channel: Channel, _ speaker: Int, _ text: String, at second: Double, length: Double = 4) -> Utterance {
+            var row = Utterance(channel: channel, speaker: speaker, language: "en")
+            row.text = text
+            row.isClosed = true
+            return Utterance(copying: row, startedAt: start.addingTimeInterval(second),
+                             updatedAt: start.addingTimeInterval(second + length))
+        }
+        let question = row(.remote, 2, "Could we move the launch to the second week of December?", at: 0)
+        var reply = Reply(target: "1")
+        reply.text = "【对方的意思】问能不能推到十二月第二周。\n【建议回复】The second week of December works for us, we just need the final specs by November 20th.\n【中文对照】可以。"
+        reply.isStreaming = false
+        reply.targetIDs = [question.id]
+        let me: Set<String> = ["local:1"]
+
+        struct Case { let name: String; let rows: [Utterance]; let now: Double; let verdict: ReplyFollowUp.Verdict; let said: Int }
+        let cases: [Case] = [
+            Case(name: "照着说", rows: [question, row(.local, 1, "The second week of December works for us. We just need the final specs by November 20th.", at: 6)],
+                 now: 30, verdict: .followed, said: 1),
+            Case(name: "改了说法", rows: [question, row(.local, 1, "Let me check with the team about testing and get back to you after the meeting.", at: 6)],
+                 now: 30, verdict: .rephrased, said: 1),
+            Case(name: "对方换了个人说别的", rows: [question, row(.remote, 1, "Let's move on to the pricing section of the deck.", at: 8)],
+                 now: 30, verdict: .skipped, said: 0),
+            Case(name: "还在等我开口", rows: [question], now: 30, verdict: .waiting, said: 0),
+            Case(name: "等太久算没回", rows: [question], now: 200, verdict: .skipped, said: 0),
+            Case(name: "会议室里别人说的不算", rows: [question, row(.local, 2, "I think December is fine for the backend.", at: 6)],
+                 now: 30, verdict: .waiting, said: 0),
+            Case(name: "对方附和一声不打断", rows: [question, row(.remote, 2, "Right?", at: 5, length: 1),
+                                              row(.local, 1, "Yes, the second week of December works, with final specs by November 20th.", at: 7)],
+                 now: 30, verdict: .followed, said: 1),
+            Case(name: "对方同一个人接着补充", rows: [question, row(.remote, 2, "We have a marketing event that week, so it would help a lot.", at: 6),
+                                                row(.local, 1, "Understood, let me confirm with engineering first.", at: 13)],
+                 now: 30, verdict: .rephrased, said: 1),
+            Case(name: "说完停很久再说的不算", rows: [question, row(.local, 1, "Second week of December works for us.", at: 6),
+                                                row(.local, 1, "Okay, next topic: the hiring plan for next quarter.", at: 40)],
+                 now: 60, verdict: .followed, said: 1),
+        ]
+        var failed = 0
+        for item in cases {
+            let result = FollowUp.find(for: reply, in: item.rows, me: me, now: start.addingTimeInterval(item.now))
+            let ok = result?.verdict == item.verdict && result?.rows.count == item.said
+            if !ok { failed += 1 }
+            print("\(ok ? "✓" : "✗") \(item.name)：\(result.map { "\($0.verdict.label)，\($0.rows.count) 句，重合 \(Int($0.overlap * 100))%" } ?? "无")")
+        }
+        // 中文：按字比
+        var chinese = reply
+        chinese.text = "【建议回复】十二月第二周可以，我们需要在十一月二十号之前拿到最终需求。"
+        let zhRows = [question, row(.local, 1, "十二月第二周没问题，不过最终需求要十一月二十号前给我们", at: 6)]
+        let zh = FollowUp.find(for: chinese, in: zhRows, me: me, now: start.addingTimeInterval(30))
+        let zhOK = zh?.verdict == .followed
+        if !zhOK { failed += 1 }
+        print("\(zhOK ? "✓" : "✗") 中文照着说：\(zh.map { "\($0.verdict.label)，重合 \(Int($0.overlap * 100))%" } ?? "无")")
+        // 回复面板的位置：悬浮窗靠右时贴左边，靠左时贴右边，高度一样
+        if let screen = NSScreen.main {
+            let area = screen.visibleFrame
+            let overlay = NSWindow(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: true)
+            let sidecar = SidecarPanel(rootView: EmptyView())
+            overlay.setFrame(NSRect(x: area.maxX - 500, y: area.minY + 100, width: 480, height: 520), display: false)
+            sidecar.place(beside: overlay)
+            let leftOK = sidecar.frame.maxX <= overlay.frame.minX && sidecar.frame.height == overlay.frame.height
+            overlay.setFrame(NSRect(x: area.minX + 10, y: area.minY + 100, width: 480, height: 520), display: false)
+            sidecar.place(beside: overlay)
+            let rightOK = sidecar.frame.minX >= overlay.frame.maxX
+            if !(leftOK && rightOK) { failed += 1 }
+            print("\(leftOK && rightOK ? "✓" : "✗") 回复面板：悬浮窗靠右时在左边，靠左时在右边")
+        }
+        // 截屏回复、只回自己的话：不比
+        var shot = reply
+        shot.source = "screenshot"
+        let mine = row(.local, 1, "I'll send it tonight.", at: 0)
+        var own = reply
+        own.targetIDs = [mine.id]
+        let skippedKinds = FollowUp.find(for: shot, in: [question], me: me) == nil
+            && FollowUp.find(for: own, in: [mine], me: me) == nil
+        if !skippedKinds { failed += 1 }
+        print("\(skippedKinds ? "✓" : "✗") 截屏回复、只回自己的话不比")
+        print(failed == 0 ? "全部通过" : "\(failed) 项不对")
+        return failed == 0 ? 0 : 1
+    }
+
     /// 字色自动的判断：在屏幕上依次放白底页面、会议画面，量那块区域的亮度，看会不会选对
     @MainActor
     static func backdrop() async -> Int32 {
@@ -562,20 +652,38 @@ enum SelfTest {
 
     /// 悬浮窗画在一张模拟的视频会议画面上，玻璃用"模糊后的背景 + 主题底色"近似
     @MainActor
-    private static func render(session: SessionModel, settings: SettingsStore, light: Bool = false, to url: URL) -> Bool {
+    /// - sidecar: 左边带上回复面板（和真实的一样贴在悬浮窗旁边）
+    private static func render(session: SessionModel, settings: SettingsStore, light: Bool = false, sidecar: Bool = false,
+                               to url: URL) -> Bool {
         let size = CGSize(width: 480, height: 600)
+        let side = sidecar ? SidecarPanel.width + SidecarPanel.gap : 0
         let backdrop = SampleBackdrop(light: light)
         let state = OverlayState()
         state.backdropIsLight = light
+        settings.value.showReplyPanel = sidecar
+        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         let view = ZStack {
             backdrop
+            // 玻璃的近似：模糊的背景只露在两个面板的形状里
             backdrop.blur(radius: 26)
-                .frame(width: size.width, height: size.height)
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            OverlayView(session: session, settings: settings, ui: state, flatForPreview: true)
-                .frame(width: size.width, height: size.height)
+                .mask {
+                    HStack(spacing: SidecarPanel.gap) {
+                        if sidecar { shape.frame(width: SidecarPanel.width) }
+                        shape.frame(width: size.width)
+                    }
+                    .frame(height: size.height)
+                }
+            HStack(spacing: SidecarPanel.gap) {
+                if sidecar {
+                    SidecarView(session: session, settings: settings, ui: state, flatForPreview: true)
+                        .frame(width: SidecarPanel.width)
+                }
+                OverlayView(session: session, settings: settings, ui: state, flatForPreview: true)
+                    .frame(width: size.width)
+            }
+            .frame(height: size.height)
         }
-        .frame(width: size.width + 80, height: size.height + 80)
+        .frame(width: size.width + side + 80, height: size.height + 80)
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
         guard let image = renderer.cgImage else {

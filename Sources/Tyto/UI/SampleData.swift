@@ -21,12 +21,18 @@ enum SampleData {
             row(.local, 1, "Great, happy to walk through the timeline.", "好的，我很乐意过一遍时间安排。", at: 2, 20),
             row(.remote, 2, "Could we move the launch to the second week of December, or is that too tight for your team?",
                 "我们能把上线推到十二月第二周吗？还是对你们团队来说太紧了？", at: 2, 31),
-            row(.remote, 2, "Also, what's the status of the", nil, pending: "billing integration", at: 2, 44),
+            row(.local, 1, "Second week of December should work. We'll just need the final specs by November 20th.",
+                "十二月第二周应该可以，我们只需要在 11 月 20 号前拿到最终需求。", at: 2, 40),
+            row(.remote, 2, "Also, what's the status of the", nil, pending: "billing integration", at: 2, 52),
         ]
     }
 
-    static func meetingReply() -> Reply {
+    /// 回复示例：回的是 rows 里的第 4 句（对方的提问），后面一句是"我实际说的"
+    static func meetingReply(answering rows: [Utterance]) -> Reply {
         var reply = Reply(target: "选中的 1 句")
+        reply.targetIDs = [rows[3].id]
+        reply.quote = rows[3].text
+        reply.quoteSpeaker = tr("远端·说话人2", "Remote · Speaker 2")
         reply.text = """
         【对方的意思】问能不能把上线推到 12 月第二周，以及这个时间对我们是否太紧。
         【建议回复】The second week of December works for us. We'd just need the final specs by November 20th to stay on track.
@@ -55,7 +61,7 @@ enum SampleData {
     static func session(settings: SettingsStore) -> SessionModel {
         let session = SessionModel(settings: settings, skills: SkillStore(), persists: false)
         let rows = rows()
-        session.showSample(rows: rows, replies: [meetingReply()], selection: [rows[3].id])
+        session.showSample(rows: rows, replies: [screenshotReply(thumbnail: nil), meetingReply(answering: rows)], selection: [rows[3].id])
         session.speakerNames["local:1"] = "我"
         session.keywords = "launch, budget"
         return session

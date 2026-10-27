@@ -128,6 +128,8 @@ struct AppSettings: Codable, Equatable {
     /// 字色：自动按悬浮窗后面画面的明暗选白字或黑字，也可以固定
     var overlayTextColor: OverlayTextColor = .auto
     var transcriptStyle: TranscriptStyle = .avatar
+    /// 回复面板（悬浮窗旁边一列）开着没有；生成新回复时自动打开
+    var showReplyPanel = false
     /// 底色浓度：0 是完全透明（连玻璃都没有），往右先出现玻璃，再加深底色
     var overlayOpacity = 0.45
     var fontSize = 14.0
