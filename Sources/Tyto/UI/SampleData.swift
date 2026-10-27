@@ -68,30 +68,35 @@ struct SampleBackdrop: View {
     var light = false
 
     var body: some View {
-        if light { lightPage } else { meeting }
+        Group {
+            if light { lightPage } else { meeting }
+        }
+        // 只是背景图：不接点击（不然溢出的部分会挡住上面的按钮）
+        .allowsHitTesting(false)
     }
 
     private var lightPage: some View {
         let line = Color(white: 0.55)
-        return VStack(alignment: .leading, spacing: 14) {
-            RoundedRectangle(cornerRadius: 4).fill(Color(white: 0.88)).frame(height: 44)
-            ForEach(0..<7, id: \.self) { index in
-                HStack(alignment: .top, spacing: 10) {
-                    Circle().fill(Color(white: index.isMultiple(of: 2) ? 0.78 : 0.70)).frame(width: 30, height: 30)
-                    VStack(alignment: .leading, spacing: 6) {
-                        RoundedRectangle(cornerRadius: 3).fill(line).frame(width: 120, height: 8)
-                        RoundedRectangle(cornerRadius: 3).fill(Color(white: 0.30)).frame(width: index.isMultiple(of: 3) ? 420 : 300, height: 9)
-                        RoundedRectangle(cornerRadius: 3).fill(Color(white: 0.30)).frame(width: 220, height: 9)
+        // 内容放在白底上面一层：白底的大小跟着给的空间走，内容多了从下面裁掉，不会把整张图撑高
+        return Color.white.overlay(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: 14) {
+                RoundedRectangle(cornerRadius: 4).fill(Color(white: 0.88)).frame(height: 44)
+                ForEach(0..<7, id: \.self) { index in
+                    HStack(alignment: .top, spacing: 10) {
+                        Circle().fill(Color(white: index.isMultiple(of: 2) ? 0.78 : 0.70)).frame(width: 30, height: 30)
+                        VStack(alignment: .leading, spacing: 6) {
+                            RoundedRectangle(cornerRadius: 3).fill(line).frame(width: 120, height: 8)
+                            RoundedRectangle(cornerRadius: 3).fill(Color(white: 0.30)).frame(width: index.isMultiple(of: 3) ? 420 : 300, height: 9)
+                            RoundedRectangle(cornerRadius: 3).fill(Color(white: 0.30)).frame(width: 220, height: 9)
+                        }
+                        .padding(10)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: index.isMultiple(of: 2) ? 0.93 : 0.97)))
                     }
-                    .padding(10)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: index.isMultiple(of: 2) ? 0.93 : 0.97)))
                 }
             }
-            Spacer(minLength: 0)
+            .padding(24)
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.white)
+        .clipped()
     }
 
     private var meeting: some View {

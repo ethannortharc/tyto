@@ -83,7 +83,7 @@ struct OverlayView: View {
                     .foregroundStyle(ui.peeking ? .green : .orange)
                     .lineLimit(1)
             }
-            HStack(spacing: 0) {
+            HStack(spacing: 6) {
                 IconButton(symbol: "translate", active: settings.value.translationEnabled, theme: theme,
                            help: settings.value.translationEnabled ? tr("隐藏译文", "Hide Translation") : tr("显示译文", "Show Translation"),
                            size: 26) {
@@ -100,7 +100,8 @@ struct OverlayView: View {
                 }
                 moreMenu
             }
-            .padding(2)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
             .background(Capsule().fill(theme.ink.opacity(0.06)))
             .overlay(Capsule().strokeBorder(theme.ink.opacity(0.08), lineWidth: 0.5))
             IconButton(symbol: "xmark", theme: theme, help: tr("退出 Tyto（⌃⌥Q）", "Quit Tyto (⌃⌥Q)"), size: 24, action: actions.quit)
@@ -130,7 +131,7 @@ struct OverlayView: View {
             Image(systemName: "camera.viewfinder")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(theme.ink.opacity(0.8))
-                .padding(.leading, 6)
+                .padding(.leading, 4)
         } primaryAction: {
             session.captureAndReply()
         }
