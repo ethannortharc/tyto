@@ -8,12 +8,13 @@ final class OverlayPanel: NSPanel {
 
     init<Content: View>(rootView: Content) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 640),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 600),
             styleMask: [.borderless, .nonactivatingPanel, .resizable],
             backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        // 阴影交给系统玻璃自己画，窗口阴影会在圆角外多出一圈方框
+        hasShadow = false
         level = .statusBar
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         hidesOnDeactivate = false
@@ -23,7 +24,7 @@ final class OverlayPanel: NSPanel {
         contentView = NSHostingView(rootView: rootView)
 
         if !setFrameUsingName(Self.autosaveName), let area = NSScreen.main?.visibleFrame {
-            setFrame(NSRect(x: area.maxX - 540, y: area.minY + 40, width: 520, height: min(640, area.height - 80)),
+            setFrame(NSRect(x: area.maxX - 500, y: area.minY + 40, width: 480, height: min(600, area.height - 80)),
                      display: false)
         }
         setFrameAutosaveName(Self.autosaveName)

@@ -38,10 +38,10 @@ struct ReplyPrompt {
 
 
         ## 输出格式
-        简短，能直接照着说。严格按下面三段输出，不要别的开场白：
-        **对方的意思**：用\(explain)一两句话说清对方在问什么、要什么。
-        **建议回复**：用\(replyLanguage)写可以直接说出口的回复，口语化，2～4 句。
-        **\(explain)对照**：上面这段回复的意思。
+        简短，能直接照着说。严格按下面三段输出，每段以【标题】开头，不要别的开场白：
+        【对方的意思】用\(explain)一两句话说清对方在问什么、要什么。
+        【建议回复】用\(replyLanguage)写可以直接说出口的回复，口语化，2～4 句，不加引号。
+        【\(explain)对照】上面这段回复的意思。
         如果信息不够、或者对方的话识别得不完整，"建议回复"就写一个得体的追问。
         """
         self.system = system
@@ -62,5 +62,52 @@ struct ReplyPrompt {
 
         请针对 ▶ 标出的话给出建议回复。
         """
+    }
+}
+
+/// 截屏回复的提示词：看懂截图里的聊天或邮件，给几个能直接粘贴发送的回复。
+struct ScreenshotPrompt {
+    let system: String
+    let user: String
+
+    init(settings: AppSettings, context: String, skills: [Skill], ocr: String, imageAttached: Bool, instruction: String?) {
+        var system = """
+        你是我的回复助手，只有我能看到你的输出。我截了一张屏幕，通常是 Teams、Slack、飞书、微信里的聊天，或者一封邮件。
+        你要看懂：这是哪里的什么对话、谁在跟我说话、最新一条需要我回应的是什么；然后写好可以直接粘贴发送的回复。
+        聊天截图里，通常右边的（或者标着"我"、我的名字的）是我发的，左边的是别人发的。
+        """
+        let background = context.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !background.isEmpty {
+            system += "\n\n## 我这边的背景（相关时参考，不相关就忽略）\n\(background)"
+        }
+        if !skills.isEmpty {
+            system += "\n\n## 回复时要遵循的技能\n"
+            for skill in skills { system += "\n### \(skill.name)\n\(skill.body)\n" }
+        }
+        let explain = settings.explainLanguage
+        let language = settings.replyLanguage.trimmingCharacters(in: .whitespaces).isEmpty
+            ? "对方使用的语言" : settings.replyLanguage
+        system += """
+
+
+        ## 输出格式
+        严格按下面的格式，每段以【标题】开头，不要别的开场白：
+        【场景】用\(explain)一句话：这是哪里的什么对话，对方是谁，要我做什么。
+        【回复 1 · 推荐】最合适的回复，可以直接粘贴发送。
+        【回复 2 · 取向】换一种取向，标题里写明取向（比如：更简短、追问细节）。
+        【回复 3 · 取向】再换一种（比如：婉拒、推迟、需要先确认）。
+        回复用\(language)。聊天回复口语、简短；邮件回复要有称呼和落款，落款写"[我的名字]"。回复正文不加引号、不加解释。
+        """
+        self.system = system
+
+        var user = imageAttached ? "截图在上面。" : "（没有发图片，只有本机 OCR 识别出的文字。）"
+        if !ocr.isEmpty {
+            user += "\n\n截图里识别出的文字（本机 OCR，[左]/[右] 表示在截图的左半边还是右半边，用来核对人名、数字）：\n\(ocr)"
+        }
+        if let instruction, !instruction.trimmingCharacters(in: .whitespaces).isEmpty {
+            user += "\n\n我的要求：\(instruction)"
+        }
+        user += "\n\n请按格式给出回复。"
+        self.user = user
     }
 }

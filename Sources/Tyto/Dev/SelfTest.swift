@@ -8,7 +8,8 @@ import Foundation
 ///   Tyto --selftest-speech <音频文件> [--locale en-US] [--target zh-Hans]   本机识别 + 本机翻译
 ///   Tyto --selftest-reply                                                  用设置里的大模型生成一条回复
 ///   Tyto --selftest-echo                                                   去回声的判断（回声要去掉，复述要保留）
-///   Tyto --render-preview <png>                                            用示例数据把悬浮窗画成图片（不碰屏幕）
+///   Tyto --selftest-screenshot <图片> [--instruction 要求]                   截屏回复：本机 OCR + 大模型
+///   Tyto --render-preview <文件夹>                                         用示例数据把悬浮窗画成图片（不碰屏幕）
 enum SelfTest {
     @MainActor
     static func runIfRequested(settings: SettingsStore) -> Bool {
@@ -22,6 +23,12 @@ enum SelfTest {
             let locale = value(after: "--locale") ?? "en-US"
             let target = value(after: "--target") ?? "zh-Hans"
             Task { exit(await speech(file: file, locale: locale, target: target)) }
+            return true
+        }
+        if let file = value(after: "--selftest-screenshot") {
+            let instruction = value(after: "--instruction")
+            let current = settings.value
+            Task { exit(await screenshot(file: file, instruction: instruction, settings: current)) }
             return true
         }
         if let path = value(after: "--render-preview") {
@@ -161,49 +168,169 @@ enum SelfTest {
         }
     }
 
-    /// 用示例数据把悬浮窗画成 PNG，检查排版（不截屏）
+    /// 用示例数据把悬浮窗画成 PNG，检查排版（不截屏）。每个主题一张会议字幕，再加一张截屏回复。
     @MainActor
-    static func renderPreview(to path: String, settings: SettingsStore) -> Int32 {
+    static func renderPreview(to folder: String, settings: SettingsStore) -> Int32 {
         let session = SessionModel(settings: settings, skills: SkillStore())
-        func row(_ channel: Channel, _ speaker: Int?, _ text: String, _ translation: String?, pending: String = "") -> Utterance {
+        func row(_ channel: Channel, _ speaker: Int?, _ text: String, _ translation: String?, pending: String = "",
+                 at minute: Int, _ second: Int) -> Utterance {
             var row = Utterance(channel: channel, speaker: speaker, language: "en")
             row.text = text
             row.pending = pending
             row.translation = translation
             row.isClosed = pending.isEmpty
-            return row
+            let time = Calendar.current.date(bySettingHour: 10, minute: minute, second: second, of: .now) ?? .now
+            return Utterance(copying: row, startedAt: time, updatedAt: time.addingTimeInterval(4))
         }
         let rows = [
-            row(.remote, 1, "Thanks for joining. We reviewed your proposal last week.", "感谢参加。我们上周看过了你们的方案。"),
-            row(.local, 1, "Sure, happy to walk through the timeline.", "好的，我很乐意过一遍时间安排。"),
+            row(.remote, 1, "Thanks for joining, Sarah. We reviewed the Northwind proposal last week.",
+                "谢谢参加，Sarah。我们上周看过了 Northwind 的方案。", at: 2, 5),
+            row(.remote, 1, "The budget looks fine at $120,000 for Q4.", "第四季度 12 万美元的预算看起来没问题。", at: 2, 12),
+            row(.local, 1, "Great, happy to walk through the timeline.", "好的，我很乐意过一遍时间安排。", at: 2, 20),
             row(.remote, 2, "Could we move the launch to the second week of December, or is that too tight for your team?",
-                "我们能把发布推迟到十二月第二周吗？还是说这对你们团队来说太紧了？"),
-            row(.remote, 1, "Also, what's the status of the", nil, pending: "billing integration"),
+                "我们能把上线推到十二月第二周吗？还是对你们团队来说太紧了？", at: 2, 31),
+            row(.remote, 2, "Also, what's the status of the", nil, pending: "billing integration", at: 2, 44),
         ]
-        var reply = Reply(target: "选中的 1 句")
-        reply.text = "**对方的意思**：问能不能把发布推到 12 月第二周，以及这个时间对我们是否太紧。\n**建议回复**：December second week works for us. We'd need the final specs by November 20th to stay on track.\n**中文对照**：12 月第二周可以。我们需要在 11 月 20 日前拿到最终需求，才能按期完成。"
-        reply.isStreaming = false
-        session.showSample(rows: rows, replies: [reply], selection: [rows[2].id])
-        session.speakerNames["local:1"] = "我"
+        var meetingReply = Reply(target: "选中的 1 句")
+        meetingReply.text = """
+        【对方的意思】问能不能把上线推到 12 月第二周，以及这个时间对我们是否太紧。
+        【建议回复】The second week of December works for us. We'd just need the final specs by November 20th to stay on track.
+        【中文对照】12 月第二周可以。我们需要在 11 月 20 日前拿到最终需求，才能按期完成。
+        """
+        meetingReply.isStreaming = false
 
-        let view = OverlayView(session: session, settings: settings, ui: OverlayState(), openMain: {}, hide: {},
-                               flatForPreview: true)
-            .frame(width: 520, height: 640)
-            .background(Color(white: 0.85))
+        let folderURL = URL(filePath: folder)
+        try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        session.speakerNames["local:1"] = "我"
+        session.keywords = "launch, budget"
+        let original = settings.value
+        defer { settings.value = original }
+
+        for theme in ThemeID.allCases {
+            settings.value.theme = theme
+            settings.value.overlayOpacity = AppSettings().overlayOpacity
+            session.showSample(rows: rows, replies: [meetingReply], selection: [rows[3].id])
+            guard render(session: session, settings: settings, to: folderURL.appending(path: "overlay-\(theme.rawValue).png"))
+            else { return 1 }
+        }
+
+        settings.value.theme = .obsidian
+        var shot = Reply(target: "截图")
+        shot.source = "screenshot"
+        shot.thumbnail = sampleThumbnail()
+        shot.copiedSection = "回复 1 · 推荐"
+        shot.isStreaming = false
+        shot.text = """
+        【场景】Teams 里 David 问你周五前能不能把评审意见发给他，他要在周一的会上用。
+        【回复 1 · 推荐】Hi David, yes — I'll send the review notes by Thursday EOD so you have time to go through them before Monday.
+        【回复 2 · 追问细节】Sure. Do you need comments on the whole deck, or just the pricing section?
+        【回复 3 · 推迟】Friday is tight on my side. Would Monday morning still work for your meeting?
+        """
+        session.showSample(rows: [], replies: [shot], selection: [])
+        return render(session: session, settings: settings, to: folderURL.appending(path: "screenshot-reply.png")) ? 0 : 1
+    }
+
+    /// 悬浮窗画在一张模拟的视频会议画面上，玻璃用"模糊后的背景 + 主题底色"近似
+    @MainActor
+    private static func render(session: SessionModel, settings: SettingsStore, to url: URL) -> Bool {
+        let size = CGSize(width: 480, height: 600)
+        let backdrop = PreviewBackdrop()
+        let view = ZStack {
+            backdrop
+            backdrop.blur(radius: 26)
+                .frame(width: size.width, height: size.height)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            OverlayView(session: session, settings: settings, ui: OverlayState(), flatForPreview: true)
+                .frame(width: size.width, height: size.height)
+        }
+        .frame(width: size.width + 80, height: size.height + 80)
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
         guard let image = renderer.cgImage else {
             print("画不出来")
-            return 1
+            return false
         }
         do {
-            try ImageFile.writePNG(image, to: URL(filePath: path))
+            try ImageFile.writePNG(image, to: url)
+            print(url.path)
+            return true
         } catch {
             print("存不了：\(error.localizedDescription)")
+            return false
+        }
+    }
+
+    @MainActor
+    private static func sampleThumbnail() -> Data? {
+        let view = VStack(alignment: .leading, spacing: 6) {
+            RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.36, green: 0.36, blue: 0.78)).frame(width: 90, height: 14)
+            RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.85)).frame(width: 120, height: 14)
+            RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.85)).frame(width: 70, height: 14)
+        }
+        .padding(12)
+        .frame(width: 160, height: 160)
+        .background(Color(red: 0.94, green: 0.94, blue: 0.97))
+        guard let image = ImageRenderer(content: view).cgImage else { return nil }
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, nil)
+        return CGImageDestinationFinalize(destination) ? data as Data : nil
+    }
+
+    /// 截屏回复自测：本机 OCR，再用设置里的大模型生成回复
+    ///   Tyto --selftest-screenshot <图片> [--instruction "婉拒"]
+    @MainActor
+    static func screenshot(file: String, instruction: String?, settings: AppSettings) async -> Int32 {
+        guard let png = try? Data(contentsOf: URL(filePath: file)) else {
+            print("读不了图片")
             return 1
         }
-        print(path)
+        let started = Date.now
+        let lines = await Screenshot.recognizeText(png)
+        print("本机 OCR：\(lines.count) 行，\(Int(Date.now.timeIntervalSince(started) * 1000)) ms")
+        let layout = Screenshot.layoutText(lines)
+        print(layout)
+        let client: LLMClient
+        do {
+            client = try LLMFactory.make(settings.llm)
+        } catch {
+            print(error.localizedDescription)
+            return 2
+        }
+        let withImage = settings.screenshotMode == .imageAndText
+        let prompt = ScreenshotPrompt(settings: settings, context: "", skills: [], ocr: layout,
+                                      imageAttached: withImage, instruction: instruction)
+        print("\n大模型：\(settings.llm.model)，\(withImage ? "图片 + OCR 文字" : "只有 OCR 文字")")
+        var text = ""
+        do {
+            for try await chunk in client.stream(system: prompt.system, user: prompt.user,
+                                                 images: withImage ? [Screenshot.forModel(png)] : [], maxTokens: 16_000) {
+                text += chunk
+            }
+        } catch {
+            print("出错：\(error.localizedDescription)")
+            return 1
+        }
+        for section in ReplyFormat.sections(text) {
+            print("[\(section.title)\(section.isCopyable ? "，可复制" : "")] \(section.body)")
+        }
+        print("会放进剪贴板的：\(ReplyFormat.firstReply(text)?.title ?? "（没有）")")
         return 0
+    }
+}
+
+/// 预览用的背景：模拟会议软件的视频画面
+private struct PreviewBackdrop: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Color(red: 0.16, green: 0.20, blue: 0.30), Color(red: 0.32, green: 0.26, blue: 0.24)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            Circle().fill(Color(red: 0.95, green: 0.72, blue: 0.55)).frame(width: 220).offset(x: -120, y: -150)
+            Circle().fill(Color(red: 0.30, green: 0.55, blue: 0.85)).frame(width: 260).offset(x: 160, y: 120)
+            RoundedRectangle(cornerRadius: 30).fill(Color(red: 0.85, green: 0.85, blue: 0.88)).frame(width: 300, height: 140)
+                .offset(x: 40, y: -30)
+            Circle().fill(Color(red: 0.45, green: 0.75, blue: 0.55)).frame(width: 140).offset(x: -150, y: 220)
+        }
     }
 }
 

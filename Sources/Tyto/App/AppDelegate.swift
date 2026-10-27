@@ -22,10 +22,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.setActivationPolicy(.accessory)
         session.load()
 
-        let panel = OverlayPanel(rootView: OverlayView(
-            session: session, settings: settings, ui: overlayState,
+        let actions = OverlayActions(
             openMain: { [weak self] in self?.openMainWindow() },
-            hide: { [weak self] in self?.toggleOverlay() }))
+            hide: { [weak self] in self?.toggleOverlay() },
+            quit: { NSApp.terminate(nil) })
+        let panel = OverlayPanel(rootView: OverlayView(session: session, settings: settings, ui: overlayState,
+                                                       actions: actions))
         panel.orderFrontRegardless()
         overlay = panel
         overlayState.$clickThrough
@@ -110,6 +112,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(menuItem(session.isRunning ? "停止听（⌃⌥L）" : "开始听（⌃⌥L）", #selector(toggleListening)))
         menu.addItem(menuItem(overlay?.isVisible == true ? "隐藏悬浮窗（⌃⌥T）" : "显示悬浮窗（⌃⌥T）", #selector(toggleOverlayAction)))
         menu.addItem(menuItem("回复（⌃⌥R）", #selector(replyAction)))
+        menu.addItem(menuItem("截屏回复（⌃⌥S）", #selector(screenshotAction)))
+        menu.addItem(menuItem("用剪贴板里的图片回复", #selector(clipboardImageAction)))
         let translation = menuItem("翻译", #selector(toggleTranslation))
         translation.state = settings.value.translationEnabled ? .on : .off
         menu.addItem(translation)
@@ -120,7 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(menuItem("会话与设置…", #selector(openMainAction)))
         menu.addItem(.separator())
         menu.addItem(menuItem("关于 Tyto 听译", #selector(about)))
-        menu.addItem(menuItem("退出", #selector(quit)))
+        menu.addItem(menuItem("退出（⌃⌥Q）", #selector(quit)))
     }
 
     private func menuItem(_ title: String, _ action: Selector) -> NSMenuItem {
@@ -132,6 +136,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleListening() { session.toggle() }
     @objc private func toggleOverlayAction() { toggleOverlay() }
     @objc private func replyAction() { reply() }
+    @objc private func screenshotAction() { screenshotReply() }
+    @objc private func clipboardImageAction() {
+        session.replyToClipboardImage()
+        if overlay?.isVisible == false { overlay?.orderFrontRegardless() }
+    }
     @objc private func toggleTranslation() {
         settings.value.translationEnabled.toggle()
         session.translationToggled()
@@ -142,6 +151,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func about() {
         NSApp.activate()
         NSApp.orderFrontStandardAboutPanel(nil)
+    }
+
+    private func screenshotReply() {
+        session.captureAndReply()
+        if overlay?.isVisible == false { overlay?.orderFrontRegardless() }
     }
 
     private func reply() {
@@ -157,5 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotKeys.register(keyCode: kVK_ANSI_R, modifiers: modifiers) { [weak self] in self?.reply() }
         hotKeys.register(keyCode: kVK_ANSI_P, modifiers: modifiers) { [weak self] in self?.overlayState.clickThrough.toggle() }
         hotKeys.register(keyCode: kVK_ANSI_L, modifiers: modifiers) { [weak self] in self?.session.toggle() }
+        hotKeys.register(keyCode: kVK_ANSI_S, modifiers: modifiers) { [weak self] in self?.screenshotReply() }
+        hotKeys.register(keyCode: kVK_ANSI_Q, modifiers: modifiers) { NSApp.terminate(nil) }
     }
 }

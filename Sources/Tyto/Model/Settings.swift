@@ -98,8 +98,26 @@ struct AppSettings: Codable, Equatable {
     /// 对方说完一句问话时自动生成回复
     var autoReplyOnQuestion = false
 
+    // 截屏回复
+    enum ScreenshotMode: String, Codable, CaseIterable, Identifiable {
+        case imageAndText
+        case textOnly
+
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .imageAndText: "图片 + 本机 OCR 文字一起给模型（看得懂版面，推荐）"
+            case .textOnly: "只给本机 OCR 文字（图片不出本机）"
+            }
+        }
+    }
+    var screenshotMode: ScreenshotMode = .imageAndText
+    /// 截屏回复生成好后，把第一个回复放进剪贴板
+    var copyFirstScreenshotReply = true
+
     // 悬浮窗
-    var overlayOpacity = 0.82
+    var theme: ThemeID = .obsidian
+    var overlayOpacity = 0.62
     var fontSize = 14.0
 }
 

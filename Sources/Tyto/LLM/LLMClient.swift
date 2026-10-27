@@ -1,8 +1,15 @@
 import Foundation
 
-/// 大模型：给系统提示和用户消息，流式返回文字。
+/// 大模型：给系统提示和用户消息（可以带图片），流式返回文字。
 protocol LLMClient: Sendable {
-    func stream(system: String, user: String, maxTokens: Int) -> AsyncThrowingStream<String, Error>
+    /// - images: PNG 图片，放在文字前面
+    func stream(system: String, user: String, images: [Data], maxTokens: Int) -> AsyncThrowingStream<String, Error>
+}
+
+extension LLMClient {
+    func stream(system: String, user: String, maxTokens: Int) -> AsyncThrowingStream<String, Error> {
+        stream(system: system, user: user, images: [], maxTokens: maxTokens)
+    }
 }
 
 enum LLMFactory {
@@ -36,7 +43,7 @@ struct AnthropicClient: LLMClient {
     /// 这些模型在 Anthropic 自己的接口上支持服务端兜底：模型拒答时自动换一个模型重答
     private static let fallbackModels: Set<String> = ["claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"]
 
-    func stream(system: String, user: String, maxTokens: Int) -> AsyncThrowingStream<String, Error> {
+    func stream(system: String, user: String, images: [Data], maxTokens: Int) -> AsyncThrowingStream<String, Error> {
         var request = URLRequest(url: baseURL.appending(path: "v1/messages"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
@@ -48,7 +55,7 @@ struct AnthropicClient: LLMClient {
             "max_tokens": maxTokens,
             "stream": true,
             "system": system,
-            "messages": [["role": "user", "content": user]],
+            "messages": [["role": "user", "content": Self.content(user, images: images)]],
         ]
         if !effort.isEmpty { body["output_config"] = ["effort": effort] }
         if Self.fallbackModels.contains(model), baseURL.host() == "api.anthropic.com" {
@@ -77,6 +84,18 @@ struct AnthropicClient: LLMClient {
     }
 }
 
+extension AnthropicClient {
+    /// 图片在前、文字在后
+    static func content(_ text: String, images: [Data]) -> Any {
+        guard !images.isEmpty else { return text }
+        var blocks: [[String: Any]] = images.map { image in
+            ["type": "image", "source": ["type": "base64", "media_type": "image/png", "data": image.base64EncodedString()]]
+        }
+        blocks.append(["type": "text", "text": text])
+        return blocks
+    }
+}
+
 /// OpenAI 的 Chat Completions 接口；DeepSeek、通义、Gemini、OpenRouter、Ollama 等都兼容这个格式。
 struct OpenAICompatibleClient: LLMClient {
     let baseURL: URL
@@ -84,7 +103,7 @@ struct OpenAICompatibleClient: LLMClient {
     let model: String
     let effort: String
 
-    func stream(system: String, user: String, maxTokens: Int) -> AsyncThrowingStream<String, Error> {
+    func stream(system: String, user: String, images: [Data], maxTokens: Int) -> AsyncThrowingStream<String, Error> {
         var request = URLRequest(url: baseURL.appending(path: "chat/completions"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
@@ -94,7 +113,7 @@ struct OpenAICompatibleClient: LLMClient {
             "stream": true,
             "messages": [
                 ["role": "system", "content": system],
-                ["role": "user", "content": user],
+                ["role": "user", "content": Self.content(user, images: images)],
             ],
         ]
         // 只有 OpenAI 自己认 reasoning_effort，别家可能报错
@@ -108,6 +127,17 @@ struct OpenAICompatibleClient: LLMClient {
             if let error = event["error"] as? [String: Any] { return .fail("大模型出错：\(error["message"] as? String ?? "")") }
             return .skip
         }
+    }
+}
+
+extension OpenAICompatibleClient {
+    static func content(_ text: String, images: [Data]) -> Any {
+        guard !images.isEmpty else { return text }
+        var parts: [[String: Any]] = [["type": "text", "text": text]]
+        for image in images {
+            parts.append(["type": "image_url", "image_url": ["url": "data:image/png;base64,\(image.base64EncodedString())"]])
+        }
+        return parts
     }
 }
 
@@ -168,7 +198,7 @@ extension LLMClient {
     /// 不需要流式时，把结果拼成一段
     func complete(system: String, user: String, maxTokens: Int) async throws -> String {
         var output = ""
-        for try await chunk in stream(system: system, user: user, maxTokens: maxTokens) { output += chunk }
+        for try await chunk in stream(system: system, user: user, images: [], maxTokens: maxTokens) { output += chunk }
         return output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

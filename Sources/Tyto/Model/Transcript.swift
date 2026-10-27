@@ -69,6 +69,18 @@ struct Reply: Identifiable, Codable, Equatable {
     var text: String
     var isStreaming: Bool
     var error: String?
+    /// "screenshot" 表示截屏回复；nil 是会议里的回复
+    var source: String?
+    /// 截图的小图（界面上显示）
+    var thumbnail: Data?
+    /// 截屏回复时我补充的要求
+    var instruction: String?
+    /// 进度提示：识别文字中、生成中……
+    var status: String?
+    /// 已经放进剪贴板的那一段的标题
+    var copiedSection: String?
+
+    var isScreenshot: Bool { source == "screenshot" }
 
     init(target: String) {
         id = UUID()

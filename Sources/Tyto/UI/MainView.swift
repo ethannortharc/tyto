@@ -49,6 +49,15 @@ private struct SessionTab: View {
             }
 
             Section {
+                TextField("关键词", text: $session.keywords, prompt: Text("比如：launch, budget, 上线, Q4"))
+            } header: {
+                Text("关键词")
+            } footer: {
+                Text("字幕里会高亮这些词（逗号分隔）。数字、日期、金额、人名不用填，会自动高亮。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
                 ForEach(skills.skills) { skill in
                     Toggle(isOn: Binding(
                         get: { session.activeSkillIDs.contains(skill.id) },
@@ -254,6 +263,18 @@ private struct ModelsTab: View {
                 Text("模型之后再定。思考深度越高回复越好，但越慢；开会时 low 比较合适。").font(.caption).foregroundStyle(.secondary)
             }
 
+            Section {
+                Picker("给模型看什么", selection: $settings.value.screenshotMode) {
+                    ForEach(AppSettings.ScreenshotMode.allCases) { Text($0.label).tag($0) }
+                }
+                Toggle("生成好后把第一个回复放进剪贴板（⌘V 直接粘贴）", isOn: $settings.value.copyFirstScreenshotReply)
+            } header: {
+                Text("截屏回复")
+            } footer: {
+                Text("⌃⌥S 框选一块屏幕（比如 Teams 的聊天、一封邮件），先在本机做 OCR，再交给上面的大模型写几个回复。框选截图要「屏幕录制」权限，第一次会弹窗。模型要能看图（Claude、GPT、Gemini 都可以）。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("回复") {
                 TextField("解释对方意思用的语言", text: $settings.value.explainLanguage)
                 TextField("建议回复用的语言（留空跟对方一致）", text: $settings.value.replyLanguage)
@@ -261,14 +282,17 @@ private struct ModelsTab: View {
             }
 
             Section {
+                Picker("主题", selection: $settings.value.theme) {
+                    ForEach(ThemeID.allCases) { Text($0.label).tag($0) }
+                }
                 LabeledContent("背景深浅") {
-                    Slider(value: $settings.value.overlayOpacity, in: 0.3...0.98)
+                    Slider(value: $settings.value.overlayOpacity, in: 0.2...0.95)
                 }
                 Stepper("字号 \(Int(settings.value.fontSize))", value: $settings.value.fontSize, in: 10...24)
             } header: {
                 Text("悬浮窗")
             } footer: {
-                Text("快捷键：⌃⌥T 显示/隐藏悬浮窗，⌃⌥R 回复（选中的句子或最近的话），⌃⌥P 点击穿透，⌃⌥L 开始/停止听。")
+                Text("快捷键：⌃⌥L 开始/停止听，⌃⌥R 回复（选中的句子或最近的话），⌃⌥S 截屏回复，⌃⌥T 显示/隐藏悬浮窗，⌃⌥P 点击穿透，⌃⌥Q 退出。")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

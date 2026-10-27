@@ -9,6 +9,10 @@ final class SessionModel: ObservableObject {
     @Published var context = "" { didSet { scheduleSave() } }
     @Published var activeSkillIDs: Set<String> = ["01-general"] { didSet { scheduleSave() } }
     @Published var speakerNames: [String: String] = [:] { didSet { scheduleSave() } }
+    /// 字幕里要高亮的词，逗号分隔
+    @Published var keywords = "" { didSet { scheduleSave() } }
+    /// 这次开始听的时间（界面上显示时长）
+    @Published private(set) var listeningSince: Date?
     @Published private(set) var rows: [Utterance] = []
     @Published private(set) var replies: [Reply] = []
     @Published var selection: Set<UUID> = []
@@ -125,6 +129,7 @@ final class SessionModel: ObservableObject {
             // 有一路开起来就算在听了
             if !isRunning {
                 isRunning = true
+                listeningSince = .now
                 startTicking()
             }
         } catch {
@@ -144,6 +149,7 @@ final class SessionModel: ObservableObject {
         }
         for channel in Channel.allCases { closeOpenRow(channel) }
         isRunning = false
+        listeningSince = nil
         levels = [:]
         startedAt = [:]
         scheduleSave()
@@ -429,6 +435,118 @@ final class SessionModel: ObservableObject {
         change(&replies[index])
     }
 
+    var keywordList: [String] {
+        keywords.split(whereSeparator: { ",，、;；\n".contains($0) })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    // MARK: - 截屏回复
+
+    /// 截图原图（重新生成时用），只放在内存里
+    private var screenshotImages: [UUID: Data] = [:]
+
+    /// 框选一块屏幕，生成回复
+    func captureAndReply() {
+        Task {
+            guard let png = await Screenshot.captureInteractive() else { return }
+            replyToScreenshot(png)
+        }
+    }
+
+    /// 用剪贴板里的图片生成回复
+    func replyToClipboardImage() {
+        guard let png = Screenshot.clipboardImage() else {
+            notice = "剪贴板里没有图片。可以用 ⌘⌃⇧4 截一块屏幕到剪贴板，或者直接按 ⌃⌥S 框选。"
+            return
+        }
+        replyToScreenshot(png)
+    }
+
+    /// 看懂截图里的聊天或邮件，生成几个能直接粘贴的回复；第一个自动放进剪贴板
+    func replyToScreenshot(_ png: Data, instruction: String? = nil) {
+        let current = settings.value
+        let client: LLMClient
+        do {
+            client = try LLMFactory.make(current.llm)
+        } catch {
+            notice = error.localizedDescription
+            return
+        }
+        if let previous = replies.indices.last, replies[previous].isStreaming {
+            replyTask?.cancel()
+            replies[previous].isStreaming = false
+            replies[previous].error = "被新的回复打断"
+        }
+        var reply = Reply(target: "截图")
+        reply.source = "screenshot"
+        reply.thumbnail = Screenshot.thumbnail(png)
+        reply.instruction = instruction
+        reply.status = "识别截图里的文字…"
+        replies.append(reply)
+        let replyID = reply.id
+        screenshotImages[replyID] = png
+        let skills = skills.skills.filter { activeSkillIDs.contains($0.id) }
+        let context = context
+
+        replyTask = Task { [weak self] in
+            let started = Date.now
+            let lines = await Screenshot.recognizeText(png)
+            RunLog.write("截屏回复：OCR \(lines.count) 行，\(Int(Date.now.timeIntervalSince(started) * 1000)) ms")
+            let withImage = current.screenshotMode == .imageAndText
+            let prompt = ScreenshotPrompt(settings: current, context: context, skills: skills,
+                                          ocr: Screenshot.layoutText(lines), imageAttached: withImage,
+                                          instruction: instruction)
+            self?.updateReply(replyID) { $0.status = "生成回复…" }
+            do {
+                let images = withImage ? [Screenshot.forModel(png)] : []
+                for try await chunk in client.stream(system: prompt.system, user: prompt.user, images: images,
+                                                     maxTokens: 16_000) {
+                    self?.updateReply(replyID) {
+                        $0.text += chunk
+                        $0.status = nil
+                    }
+                }
+                self?.finishScreenshotReply(replyID, copyFirst: current.copyFirstScreenshotReply)
+            } catch {
+                let message = error is CancellationError ? "已停止" : error.localizedDescription
+                self?.updateReply(replyID) {
+                    if $0.isStreaming { $0.error = message }
+                    $0.isStreaming = false
+                    $0.status = nil
+                }
+            }
+            self?.scheduleSave()
+        }
+    }
+
+    /// 带着新的要求（比如"婉拒""用中文"）对同一张截图重新生成
+    func regenerateScreenshotReply(_ id: UUID, instruction: String) {
+        guard let png = screenshotImages[id] else {
+            notice = "原图已经不在了（重启过 Tyto），请重新截一次"
+            return
+        }
+        replyToScreenshot(png, instruction: instruction)
+    }
+
+    func canRegenerate(_ id: UUID) -> Bool { screenshotImages[id] != nil }
+
+    private func finishScreenshotReply(_ id: UUID, copyFirst: Bool) {
+        updateReply(id) { reply in
+            reply.isStreaming = false
+            reply.status = nil
+            if copyFirst, let first = ReplyFormat.firstReply(reply.text) {
+                Clipboard.copy(first.body)
+                reply.copiedSection = first.title
+            }
+        }
+    }
+
+    func copy(_ section: ReplySection, of id: UUID) {
+        Clipboard.copy(section.body)
+        updateReply(id) { $0.copiedSection = section.title }
+    }
+
     // MARK: - 说话人、选择
 
     func speakerLabel(_ row: Utterance) -> String {
@@ -474,6 +592,7 @@ final class SessionModel: ObservableObject {
         var speakerNames: [String: String]
         var rows: [Utterance]
         var replies: [Reply]
+        var keywords: String?
     }
 
     static var folder: URL { URL.applicationSupportDirectory.appending(path: "Tyto/sessions") }
@@ -486,6 +605,7 @@ final class SessionModel: ObservableObject {
         context = file.context
         activeSkillIDs = Set(file.activeSkillIDs)
         speakerNames = file.speakerNames
+        keywords = file.keywords ?? ""
         rows = file.rows.map { row in
             var row = row
             row.isClosed = true
@@ -494,6 +614,7 @@ final class SessionModel: ObservableObject {
         replies = file.replies.map { reply in
             var reply = reply
             reply.isStreaming = false
+            reply.status = nil
             return reply
         }
     }
@@ -509,7 +630,8 @@ final class SessionModel: ObservableObject {
 
     func save() {
         let file = SessionFile(title: title, context: context, activeSkillIDs: activeSkillIDs.sorted(),
-                               speakerNames: speakerNames, rows: rows.filter(\.isClosed), replies: replies)
+                               speakerNames: speakerNames, rows: rows.filter(\.isClosed), replies: replies,
+                               keywords: keywords)
         try? FileManager.default.createDirectory(at: Self.folder, withIntermediateDirectories: true)
         if let data = try? JSONEncoder().encode(file) {
             try? data.write(to: Self.currentFile, options: .atomic)
@@ -574,5 +696,13 @@ final class LevelMeter: @unchecked Sendable {
             for key in values.keys { values[key] = (values[key] ?? 0) * 0.6 }
             return current
         }
+    }
+}
+
+enum Clipboard {
+    @MainActor
+    static func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }
