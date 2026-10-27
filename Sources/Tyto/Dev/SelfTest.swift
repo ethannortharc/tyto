@@ -244,10 +244,14 @@ enum SelfTest {
             else { return 1 }
         }
 
-        settings.value.theme = .obsidian
         let shot = SampleData.screenshotReply(thumbnail: sampleThumbnail())
-        session.showSample(rows: [], replies: [shot], selection: [])
-        return render(session: session, settings: settings, to: folderURL.appending(path: "screenshot-reply.png")) ? 0 : 1
+        for theme in ThemeID.allCases {
+            settings.value.theme = theme
+            session.showSample(rows: [], replies: [shot], selection: [])
+            guard render(session: session, settings: settings, to: folderURL.appending(path: "screenshot-reply-\(theme.rawValue).png"))
+            else { return 1 }
+        }
+        return 0
     }
 
     static func models(_ id: String, settings: AppSettings) async -> Int32 {
@@ -461,6 +465,32 @@ enum SelfTest {
                 try? ImageFile.writePNG(image, to: url)
                 print(url.path)
             }
+        }
+        // 侧栏是系统材质，上面那种画法画不出来，单独按侧栏的样子画一张图标列表
+        let sidebar = VStack(alignment: .leading, spacing: 6) {
+            ForEach(SettingsPage.groups, id: \.title) { group in
+                Text(group.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary).padding(.top, 8)
+                ForEach(group.pages) { page in
+                    HStack(spacing: 8) {
+                        IconTile(symbol: page.symbol, colors: page.colors(settings.value.iconStyle), size: 22)
+                        Text(page.title).font(.system(size: 13))
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(page == .session ? Brand.accent.opacity(0.35) : .clear))
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: 210)
+        .background(Color(white: 0.17))
+        .environment(\.colorScheme, .dark)
+        let renderer = ImageRenderer(content: sidebar)
+        renderer.scale = 2
+        if let image = renderer.cgImage {
+            let url = folderURL.appending(path: "settings-sidebar.png")
+            try? ImageFile.writePNG(image, to: url)
+            print(url.path)
         }
         return 0
     }

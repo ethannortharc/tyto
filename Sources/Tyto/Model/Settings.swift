@@ -120,8 +120,11 @@ struct AppSettings: Codable, Equatable {
     // 界面语言
     var language: AppLanguage = .system
 
+    // 设置窗口
+    var iconStyle: IconStyle = .graphite
+
     // 悬浮窗
-    var theme: ThemeID = .obsidian
+    var theme: ThemeID = .graphite
     /// 底色浓度：0 是完全透明（连玻璃都没有），往右先出现玻璃，再加深底色
     var overlayOpacity = 0.45
     var fontSize = 14.0
@@ -254,5 +257,19 @@ enum Keychain {
         var item = query
         item[kSecValueData as String] = Data(trimmed.utf8)
         SecItemAdd(item as CFDictionary, nil)
+    }
+}
+
+/// 设置窗口侧栏的图标块：统一石墨色，或每页一个低饱和的颜色
+enum IconStyle: String, Codable, CaseIterable, Identifiable, Sendable {
+    case graphite
+    case muted
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .graphite: tr("石墨", "Graphite")
+        case .muted: tr("彩色", "Color")
+        }
     }
 }

@@ -23,7 +23,7 @@ struct MainView: View {
                 ForEach(SettingsPage.groups, id: \.title) { group in
                     Section(group.title) {
                         ForEach(group.pages) { page in
-                            Label { Text(page.title) } icon: { IconTile(symbol: page.symbol, colors: page.colors, size: 22) }
+                            Label { Text(page.title) } icon: { IconTile(symbol: page.symbol, colors: page.colors(settings.value.iconStyle), size: 22) }
                                 .tag(page)
                         }
                     }
@@ -34,7 +34,7 @@ struct MainView: View {
         } detail: {
             let current = page ?? .session
             VStack(spacing: 0) {
-                PageHeader(page: current)
+                PageHeader(page: current, iconStyle: settings.value.iconStyle)
                 pageView(current)
             }
             .frame(minWidth: 560)
@@ -42,6 +42,7 @@ struct MainView: View {
         .frame(minWidth: 820, minHeight: 620)
         // 和系统设置一样用滑动开关
         .toggleStyle(.switch)
+        .tint(Brand.accent)
         // 换界面语言时整棵重建，文字立即全部换过来（当前在哪一页不受影响）
         .id(settings.value.language)
     }
@@ -98,7 +99,7 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
     var symbol: String {
         switch self {
         case .session: "person.2.wave.2.fill"
-        case .skills: "wand.and.sparkles"
+        case .skills: "book.closed.fill"
         case .listen: "waveform"
         case .translation: "character.bubble.fill"
         case .screenshot: "camera.viewfinder"
@@ -109,18 +110,23 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    var colors: [Color] {
+    /// 低饱和的页面色（彩色图标块用）
+    private var muted: UInt32 {
         switch self {
-        case .session: [Color(red: 0.30, green: 0.62, blue: 1.0), Color(red: 0.16, green: 0.40, blue: 0.95)]
-        case .skills: [Color(red: 0.78, green: 0.50, blue: 1.0), Color(red: 0.55, green: 0.30, blue: 0.95)]
-        case .listen: [Color(red: 1.0, green: 0.42, blue: 0.55), Color(red: 0.92, green: 0.22, blue: 0.40)]
-        case .translation: [Color(red: 0.32, green: 0.85, blue: 0.55), Color(red: 0.14, green: 0.66, blue: 0.40)]
-        case .screenshot: [Color(red: 0.25, green: 0.82, blue: 0.85), Color(red: 0.10, green: 0.58, blue: 0.72)]
-        case .services: [Color(red: 0.45, green: 0.50, blue: 1.0), Color(red: 0.30, green: 0.30, blue: 0.85)]
-        case .appearance: [Color(red: 1.0, green: 0.55, blue: 0.75), Color(red: 0.85, green: 0.35, blue: 0.80)]
-        case .shortcuts: [Color(red: 0.62, green: 0.64, blue: 0.70), Color(red: 0.42, green: 0.44, blue: 0.50)]
-        case .permissions: [Color(red: 0.40, green: 0.75, blue: 1.0), Color(red: 0.25, green: 0.55, blue: 0.90)]
+        case .session: 0x5E7891
+        case .skills: 0x9C7A4E
+        case .listen: 0xA8625A
+        case .translation: 0x6B8868
+        case .screenshot: 0x5A8682
+        case .services: 0x5C6573
+        case .appearance: 0xAA7656
+        case .shortcuts: 0x75736D
+        case .permissions: 0x7A7C5C
         }
+    }
+
+    func colors(_ style: IconStyle) -> [Color] {
+        style == .muted ? [Brand.rgb(muted)] : Brand.graphite
     }
 
     static var groups: [(title: String, pages: [SettingsPage])] { [
@@ -132,22 +138,38 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
 
 // MARK: - 通用部件
 
-/// 系统设置风格的彩色图标块
+/// 品牌色：取仓鸮（Tyto）背羽的赭黄。设置窗口里的选中、开关、链接都用它，不用系统蓝
+enum Brand {
+    static let accent = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.82, green: 0.64, blue: 0.42, alpha: 1)
+            : NSColor(red: 0.61, green: 0.42, blue: 0.18, alpha: 1)
+    })
+
+    /// 图标块的石墨色
+    static let graphite = [rgb(0x3A3A3D), rgb(0x26262A)]
+
+    static func rgb(_ hex: UInt32) -> Color {
+        Color(red: Double(hex >> 16 & 0xFF) / 255, green: Double(hex >> 8 & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
+    }
+}
+
+/// 图标块：象牙白图标，底色是石墨或低饱和的页面色
 struct IconTile: View {
     let symbol: String
     let colors: [Color]
     var size: CGFloat = 22
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
-                .fill(LinearGradient(colors: colors, startPoint: .top, endPoint: .bottom))
-            RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
-                .strokeBorder(.white.opacity(0.22), lineWidth: 0.5)
+            shape.fill(LinearGradient(colors: colors.count > 1 ? colors : [colors[0], colors[0]], startPoint: .top, endPoint: .bottom))
+            // 上沿一道细亮边，有一点实物的厚度
+            shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0.04)], startPoint: .top, endPoint: .bottom),
+                               lineWidth: 0.5)
             Image(systemName: symbol)
-                .font(.system(size: size * 0.5, weight: .semibold))
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.18), radius: 0.5, y: 0.5)
+                .font(.system(size: size * 0.48, weight: .medium))
+                .foregroundStyle(Brand.rgb(0xEFE9DE))
         }
         .frame(width: size, height: size)
     }
@@ -155,10 +177,11 @@ struct IconTile: View {
 
 private struct PageHeader: View {
     let page: SettingsPage
+    let iconStyle: IconStyle
 
     var body: some View {
         HStack(spacing: 14) {
-            IconTile(symbol: page.symbol, colors: page.colors, size: 44)
+            IconTile(symbol: page.symbol, colors: page.colors(iconStyle), size: 44)
             VStack(alignment: .leading, spacing: 3) {
                 Text(page.title).font(.system(size: 20, weight: .bold))
                 Text(page.subtitle).font(.system(size: 12.5)).foregroundStyle(.secondary)
@@ -174,7 +197,6 @@ private struct PageHeader: View {
 /// 一行设置：前面一个彩色小图标，标题，可选的说明，右边是控件
 private struct Row<Content: View>: View {
     let symbol: String
-    var tint: Color = .accentColor
     let title: String
     var detail: String?
     @ViewBuilder let content: Content
@@ -185,8 +207,8 @@ private struct Row<Content: View>: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(tint)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.secondary)
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
@@ -214,10 +236,10 @@ private struct OptionCard: View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: symbol)
                     .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(selected ? Color.white : Color.accentColor)
+                    .foregroundStyle(selected ? Color.white : Brand.accent)
                     .frame(width: 34, height: 34)
                     .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(selected ? Color.accentColor : Color.accentColor.opacity(0.12)))
+                        .fill(selected ? Brand.accent : Brand.accent.opacity(0.12)))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.primary)
                     if let detail {
@@ -228,14 +250,14 @@ private struct OptionCard: View {
                 Spacer(minLength: 0)
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 15))
-                    .foregroundStyle(selected ? Color.accentColor : Color.secondary.opacity(0.5))
+                    .foregroundStyle(selected ? Brand.accent : Color.secondary.opacity(0.5))
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.primary.opacity(hovered ? 0.06 : 0.03)))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: selected ? 1.5 : 1))
+                .strokeBorder(selected ? Brand.accent : Color.primary.opacity(0.08), lineWidth: selected ? 1.5 : 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -273,12 +295,12 @@ private struct SessionPage: View {
     var body: some View {
         Form {
             Section {
-                Row(symbol: "textformat", tint: .blue, title: tr("会议名称", "Meeting Name")) {
+                Row(symbol: "textformat", title: tr("会议名称", "Meeting Name")) {
                     TextField("", text: $session.title, prompt: Text(tr("新会议", "New Meeting"))).frame(maxWidth: 280)
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Label { Text(tr("背景", "Context")) } icon: {
-                        Image(systemName: "doc.text").foregroundStyle(.blue)
+                        Image(systemName: "doc.text").foregroundStyle(.secondary)
                     }
                     TextEditor(text: $session.context)
                         .font(.system(size: 13))
@@ -296,7 +318,7 @@ private struct SessionPage: View {
                             }
                         }
                 }
-                Row(symbol: "highlighter", tint: .pink, title: tr("关键词", "Keywords"), detail: tr("字幕里高亮，逗号分隔。数字、日期、人名会自动高亮。", "Highlighted in captions, comma-separated. Numbers, dates and names are highlighted automatically.")) {
+                Row(symbol: "highlighter", title: tr("关键词", "Keywords"), detail: tr("字幕里高亮，逗号分隔。数字、日期、人名会自动高亮。", "Highlighted in captions, comma-separated. Numbers, dates and names are highlighted automatically.")) {
                     TextField("", text: $session.keywords, prompt: Text(tr("launch, budget, 上线", "launch, budget, deadline"))).frame(maxWidth: 280)
                 }
             } header: {
@@ -311,7 +333,7 @@ private struct SessionPage: View {
                             if on { session.activeSkillIDs.insert(skill.id) } else { session.activeSkillIDs.remove(skill.id) }
                         })) {
                         HStack(spacing: 10) {
-                            Image(systemName: "sparkle").foregroundStyle(.purple).frame(width: 20)
+                            Image(systemName: "book.closed").foregroundStyle(.secondary).frame(width: 20)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(skill.name)
                                 if !skill.description.isEmpty {
@@ -325,7 +347,7 @@ private struct SessionPage: View {
                 HStack {
                     Text(tr("用到的技能", "Skills in Use"))
                     Spacer()
-                    Button(tr("编辑技能", "Edit Skills")) { page = .skills }.buttonStyle(.link).font(.caption)
+                    Button(tr("编辑技能", "Edit Skills")) { page = .skills }.buttonStyle(.plain).foregroundStyle(Brand.accent).font(.caption)
                 }
             }
 
@@ -336,7 +358,7 @@ private struct SessionPage: View {
                 }
                 ForEach(session.knownSpeakers, id: \.key) { speaker in
                     Row(symbol: speaker.key.hasPrefix("local") ? "mic.circle.fill" : "person.wave.2.fill",
-                        tint: speaker.key.hasPrefix("local") ? .green : .blue, title: speaker.label) {
+                        title: speaker.label) {
                         TextField("", text: Binding(
                             get: { session.speakerNames[speaker.key] ?? "" },
                             set: { session.rename(speaker.key, to: $0) }),
@@ -349,17 +371,17 @@ private struct SessionPage: View {
             }
 
             Section {
-                Row(symbol: "text.bubble", tint: .blue, title: tr("解释用的语言", "Explain In"),
+                Row(symbol: "text.bubble", title: tr("解释用的语言", "Explain In"),
                     detail: tr("回复里说明「对方的意思」用的语言；留空跟界面语言一致", "Language for \"what they mean\"; empty follows the interface")) {
                     TextField("", text: $settings.value.explainLanguage, prompt: Text(tr("跟界面语言一致", "Same as interface")))
                         .frame(maxWidth: 200)
                 }
-                Row(symbol: "quote.bubble", tint: .blue, title: tr("回复用的语言", "Reply In"),
+                Row(symbol: "quote.bubble", title: tr("回复用的语言", "Reply In"),
                     detail: tr("建议回复用的语言；留空跟对方说话的语言一致", "Language of the suggested reply; empty matches the other side")) {
                     TextField("", text: $settings.value.replyLanguage, prompt: Text(tr("跟对方一致", "Same as theirs")))
                         .frame(maxWidth: 200)
                 }
-                Row(symbol: "questionmark.bubble", tint: .orange, title: tr("对方提问时自动回复", "Auto-Reply to Questions"),
+                Row(symbol: "questionmark.bubble", title: tr("对方提问时自动回复", "Auto-Reply to Questions"),
                     detail: tr("远端说完一句问句，自动生成回复建议", "Draft a reply automatically when the remote side asks a question")) {
                     Toggle("", isOn: $settings.value.autoReplyOnQuestion).labelsHidden()
                 }
@@ -412,7 +434,7 @@ private struct SkillsPage: View {
         HStack(spacing: 0) {
             VStack(spacing: 0) {
                 List(skills.skills, selection: $selectedID) { skill in
-                    Label { Text(skill.name) } icon: { Image(systemName: "sparkle").foregroundStyle(.purple) }
+                    Label { Text(skill.name) } icon: { Image(systemName: "book.closed").foregroundStyle(.secondary) }
                         .tag(skill.id)
                 }
                 .listStyle(.inset)
@@ -438,15 +460,15 @@ private struct SkillsPage: View {
             Divider()
             if let binding = Binding($draft) {
                 Form {
-                    Row(symbol: "textformat", tint: .purple, title: tr("名称", "Name")) {
+                    Row(symbol: "textformat", title: tr("名称", "Name")) {
                         TextField("", text: binding.name).frame(maxWidth: 260)
                     }
-                    Row(symbol: "questionmark.bubble", tint: .purple, title: tr("什么时候用", "When to Use")) {
+                    Row(symbol: "questionmark.bubble", title: tr("什么时候用", "When to Use")) {
                         TextField("", text: binding.description).frame(maxWidth: 260)
                     }
                     VStack(alignment: .leading, spacing: 8) {
                         Label { Text(tr("做法说明（Markdown，原样交给大模型）", "Instructions (Markdown, passed to the model as-is)")) } icon: {
-                            Image(systemName: "text.alignleft").foregroundStyle(.purple)
+                            Image(systemName: "text.alignleft").foregroundStyle(.secondary)
                         }
                         TextEditor(text: binding.body)
                             .font(.system(size: 12.5, design: .monospaced))
@@ -465,7 +487,7 @@ private struct SkillsPage: View {
                 }
                 .formStyle(.grouped)
             } else {
-                ContentUnavailableView(tr("选一个技能", "Select a Skill"), systemImage: "wand.and.sparkles",
+                ContentUnavailableView(tr("选一个技能", "Select a Skill"), systemImage: "book.closed",
                                        description: Text(tr("左边选一个编辑，或者点 + 新建", "Pick one on the left to edit, or click + to create one")))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -483,13 +505,13 @@ private struct ListenPage: View {
     var body: some View {
         Form {
             Section {
-                Row(symbol: "person.wave.2.fill", tint: .blue, title: tr("远端", "Remote"), detail: tr("会议软件里对方的声音（录系统声音）", "The other side's audio from the meeting app (system audio)")) {
+                Row(symbol: "person.wave.2.fill", title: tr("远端", "Remote"), detail: tr("会议软件里对方的声音（录系统声音）", "The other side's audio from the meeting app (system audio)")) {
                     Toggle("", isOn: $settings.value.captureRemote).labelsHidden()
                 }
-                Row(symbol: "mic.fill", tint: .green, title: tr("本地", "Local"), detail: tr("麦克风收到的声音：你和会议室里的人", "Sound from the microphone: you and people in the room")) {
+                Row(symbol: "mic.fill", title: tr("本地", "Local"), detail: tr("麦克风收到的声音：你和会议室里的人", "Sound from the microphone: you and people in the room")) {
                     Toggle("", isOn: $settings.value.captureLocal).labelsHidden()
                 }
-                Row(symbol: "mic.badge.plus", tint: .green, title: tr("麦克风", "Microphone"), detail: tr("自动：跟系统默认走，跳过 BlackHole 这类虚拟声卡", "Auto: follows the system default, skipping virtual devices like BlackHole")) {
+                Row(symbol: "mic.badge.plus", title: tr("麦克风", "Microphone"), detail: tr("自动：跟系统默认走，跳过 BlackHole 这类虚拟声卡", "Auto: follows the system default, skipping virtual devices like BlackHole")) {
                     Picker("", selection: $settings.value.localInputDeviceUID) {
                         Text(tr("自动", "Auto")).tag("")
                         ForEach(inputDevices) { device in
@@ -499,7 +521,7 @@ private struct ListenPage: View {
                     .labelsHidden()
                     .frame(maxWidth: 240)
                 }
-                Row(symbol: "ear.and.waveform", tint: .orange, title: tr("去掉回声", "Remove Echo"), detail: tr("外放开会时，麦克风收到的对方声音不重复显示", "With speakers on, the other side's voice picked up by the mic isn't shown twice")) {
+                Row(symbol: "ear.and.waveform", title: tr("去掉回声", "Remove Echo"), detail: tr("外放开会时，麦克风收到的对方声音不重复显示", "With speakers on, the other side's voice picked up by the mic isn't shown twice")) {
                     Toggle("", isOn: $settings.value.echoCancellation).labelsHidden()
                 }
             } header: {
@@ -555,17 +577,17 @@ private struct SpeechDetails: View {
 
     var body: some View {
         if let capability = settings.value.speechMethod.capability {
-            Row(symbol: "server.rack", tint: .indigo, title: tr("服务商和模型", "Provider & Model")) {
+            Row(symbol: "server.rack", title: tr("服务商和模型", "Provider & Model")) {
                 ModelPicker(settings: settings, slot: $settings.value.speechSlot, capability: capability)
             }
-            Row(symbol: "globe", tint: .blue, title: tr("可能出现的语言", "Expected Languages"), detail: tr("逗号分隔，如 en,zh；只填一种识别更准", "Comma-separated, e.g. en,zh; a single language is more accurate")) {
+            Row(symbol: "globe", title: tr("可能出现的语言", "Expected Languages"), detail: tr("逗号分隔，如 en,zh；只填一种识别更准", "Comma-separated, e.g. en,zh; a single language is more accurate")) {
                 TextField("", text: $settings.value.speechLanguageHints).frame(maxWidth: 200)
             }
         } else {
-            Row(symbol: "person.wave.2.fill", tint: .blue, title: tr("远端说的语言", "Remote Language")) {
+            Row(symbol: "person.wave.2.fill", title: tr("远端说的语言", "Remote Language")) {
                 LanguageField(code: $settings.value.remoteLocale, choices: Languages.speechChoices)
             }
-            Row(symbol: "mic.fill", tint: .green, title: tr("本地说的语言", "Local Language")) {
+            Row(symbol: "mic.fill", title: tr("本地说的语言", "Local Language")) {
                 LanguageField(code: $settings.value.localLocale, choices: Languages.speechChoices)
             }
         }
@@ -600,7 +622,7 @@ private struct ServicesPage: View {
             }
 
             Section {
-                Row(symbol: "text.bubble.fill", tint: .blue, title: tr("回复", "Reply"), detail: tr("会议回复、截屏回复", "Meeting replies and screenshot replies")) {
+                Row(symbol: "text.bubble.fill", title: tr("回复", "Reply"), detail: tr("会议回复、截屏回复", "Meeting replies and screenshot replies")) {
                     VStack(alignment: .trailing, spacing: 6) {
                         ModelPicker(settings: settings, slot: $settings.value.replySlot, capability: .chat)
                         Picker("", selection: $settings.value.replySlot.effort) {
@@ -614,13 +636,13 @@ private struct ServicesPage: View {
                         .frame(maxWidth: 300)
                     }
                 }
-                Row(symbol: "eye.fill", tint: .teal, title: tr("看图", "Vision"), detail: tr("截屏回复选「先用看图模型读图」时用", "Used when Screenshot Reply is set to “Vision Model First”")) {
+                Row(symbol: "eye.fill", title: tr("看图", "Vision"), detail: tr("截屏回复选「先用看图模型读图」时用", "Used when Screenshot Reply is set to “Vision Model First”")) {
                     ModelPicker(settings: settings, slot: $settings.value.visionSlot, capability: .vision)
                 }
-                Row(symbol: "character.bubble.fill", tint: .green, title: tr("翻译", "Translation"), detail: tr("翻译方式选「大模型翻译」时用", "Used when the translation method is “LLM Translation”")) {
+                Row(symbol: "character.bubble.fill", title: tr("翻译", "Translation"), detail: tr("翻译方式选「大模型翻译」时用", "Used when the translation method is “LLM Translation”")) {
                     ModelPicker(settings: settings, slot: $settings.value.translationSlot, capability: .chat, sameAsReply: true)
                 }
-                Row(symbol: "waveform", tint: .pink, title: tr("语音识别", "Speech Recognition"), detail: settings.value.speechMethod.title) {
+                Row(symbol: "waveform", title: tr("语音识别", "Speech Recognition"), detail: settings.value.speechMethod.title) {
                     VStack(alignment: .trailing, spacing: 6) {
                         Picker("", selection: $settings.value.speechMethod) {
                             ForEach(SpeechMethod.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
@@ -709,7 +731,7 @@ private struct ProviderRow: View {
                     }
                     Spacer()
                     if !provider.needsKey {
-                        StatusPill(text: tr("本机", "Local"), color: .blue, symbol: "desktopcomputer")
+                        StatusPill(text: tr("本机", "Local"), color: Brand.accent, symbol: "desktopcomputer")
                     } else if provider.key != nil {
                         StatusPill(text: tr("已填 key", "Key Set"), color: .green, symbol: "checkmark")
                     } else {
@@ -726,14 +748,14 @@ private struct ProviderRow: View {
 
             if expanded {
                 VStack(spacing: 8) {
-                    Row(symbol: "tag", tint: .gray, title: tr("名字", "Name")) {
+                    Row(symbol: "tag", title: tr("名字", "Name")) {
                         TextField("", text: $provider.name).frame(maxWidth: 280)
                     }
-                    Row(symbol: "link", tint: .blue, title: tr("接口地址", "Endpoint")) {
+                    Row(symbol: "link", title: tr("接口地址", "Endpoint")) {
                         TextField("", text: $provider.baseURL, prompt: Text(provider.info.baseURL)).frame(maxWidth: 280)
                     }
                     if provider.needsKey {
-                        Row(symbol: "key.fill", tint: .orange, title: "API key") {
+                        Row(symbol: "key.fill", title: "API key") {
                             HStack(spacing: 6) {
                                 SecureField("", text: $key).frame(maxWidth: 220)
                                     .onChange(of: key) { provider.setKey(key) }
@@ -879,19 +901,19 @@ private struct TranslationPage: View {
     var body: some View {
         Form {
             Section {
-                Row(symbol: "character.bubble.fill", tint: .green, title: tr("显示译文", "Show Translation")) {
+                Row(symbol: "character.bubble.fill", title: tr("显示译文", "Show Translation")) {
                     Toggle("", isOn: Binding(get: { settings.value.translationEnabled },
                                              set: { settings.value.translationEnabled = $0; session.translationToggled() }))
                         .labelsHidden()
                 }
-                Row(symbol: "arrow.right.circle.fill", tint: .green, title: tr("译成", "Translate To")) {
+                Row(symbol: "arrow.right.circle.fill", title: tr("译成", "Translate To")) {
                     LanguageField(code: $settings.value.targetLanguage, choices: Languages.translationChoices)
                 }
             }
             Section {
                 OptionCard(symbol: "apple.logo", title: tr("Apple 本机翻译", "Apple On-Device Translation"), detail: tr("免费、不联网、快。第一次要下载语言包。", "Free, offline and fast. The first use needs a language pack download."),
                            selected: settings.value.translationProvider == .apple) { settings.value.translationProvider = .apple }
-                OptionCard(symbol: "sparkles", title: tr("大模型翻译", "LLM Translation"), detail: tr("更懂上下文和术语。默认用回复的模型，也可以单独选。", "Better with context and terminology. Uses the Reply model by default, or pick a separate one."),
+                OptionCard(symbol: "text.bubble", title: tr("大模型翻译", "LLM Translation"), detail: tr("更懂上下文和术语。默认用回复的模型，也可以单独选。", "Better with context and terminology. Uses the Reply model by default, or pick a separate one."),
                            selected: settings.value.translationProvider == .llm) { settings.value.translationProvider = .llm }
             } header: {
                 Text(tr("翻译方式", "Translation Method"))
@@ -903,7 +925,7 @@ private struct TranslationPage: View {
                         TranslationDownload(source: settings.value.localLocale, target: settings.value.targetLanguage)
                     }
                 } else {
-                    Row(symbol: "server.rack", tint: .indigo, title: tr("翻译用的模型", "Translation Model")) {
+                    Row(symbol: "server.rack", title: tr("翻译用的模型", "Translation Model")) {
                         ModelPicker(settings: settings, slot: $settings.value.translationSlot, capability: .chat, sameAsReply: true)
                     }
                 }
@@ -924,7 +946,7 @@ private struct TranslationDownload: View {
     @State private var message = ""
 
     var body: some View {
-        Row(symbol: "arrow.down.circle.fill", tint: .green,
+        Row(symbol: "arrow.down.circle.fill",
             title: "\(Languages.name(source)) → \(Languages.name(target))", detail: message.isEmpty ? nil : message) {
             if installed == true {
                 StatusPill(text: tr("已就绪", "Ready"), color: .green, symbol: "checkmark")
@@ -984,7 +1006,7 @@ private struct ScreenshotPage: View {
                                selected: settings.value.screenshotMode == mode) { settings.value.screenshotMode = mode }
                 }
                 if settings.value.screenshotMode == .visionModel {
-                    Row(symbol: "eye.fill", tint: .teal, title: tr("看图模型", "Vision Model")) {
+                    Row(symbol: "eye.fill", title: tr("看图模型", "Vision Model")) {
                         ModelPicker(settings: settings, slot: $settings.value.visionSlot, capability: .vision)
                     }
                 }
@@ -1002,7 +1024,7 @@ private struct ScreenshotPage: View {
             }
 
             Section {
-                Row(symbol: "doc.on.clipboard.fill", tint: .teal, title: tr("自动复制第一个回复", "Copy First Reply Automatically"), detail: tr("生成好后直接 ⌘V 粘贴发送", "Paste and send with ⌘V once it's ready")) {
+                Row(symbol: "doc.on.clipboard.fill", title: tr("自动复制第一个回复", "Copy First Reply Automatically"), detail: tr("生成好后直接 ⌘V 粘贴发送", "Paste and send with ⌘V once it's ready")) {
                     Toggle("", isOn: $settings.value.copyFirstScreenshotReply).labelsHidden()
                 }
             }
@@ -1021,16 +1043,16 @@ private struct CaptureChip: View {
             VStack(spacing: 8) {
                 Image(systemName: target.symbol)
                     .font(.system(size: 22, weight: .light))
-                    .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(selected ? Brand.accent : Color.secondary)
                     .frame(height: 30)
                 Text(target.title).font(.system(size: 12, weight: .semibold))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(selected ? Color.accentColor.opacity(0.1) : Color.primary.opacity(0.03)))
+                .fill(selected ? Brand.accent.opacity(0.1) : Color.primary.opacity(0.03)))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(selected ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: selected ? 1.5 : 1))
+                .strokeBorder(selected ? Brand.accent : Color.primary.opacity(0.08), lineWidth: selected ? 1.5 : 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1049,7 +1071,7 @@ private struct OllamaCatalog: View {
     var body: some View {
         Group {
             HStack(spacing: 12) {
-                IconTile(symbol: "text.viewfinder", colors: [Color(red: 0.55, green: 0.58, blue: 0.65), Color(red: 0.35, green: 0.37, blue: 0.45)], size: 30)
+                IconTile(symbol: "text.viewfinder", colors: Brand.graphite, size: 30)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(tr("系统文字识别（Apple Vision）", "System Text Recognition (Apple Vision)")).font(.system(size: 13, weight: .semibold))
                     Text(tr("系统自带，不用下载；中英日文；聊天截图约 0.3 秒，整个 5K 屏约 0.6 秒", "Built in, no download; Chinese, English, Japanese; about 0.3 s for a chat screenshot, 0.6 s for a full 5K screen")).font(.caption).foregroundStyle(.secondary)
@@ -1059,7 +1081,7 @@ private struct OllamaCatalog: View {
             }
 
             HStack(spacing: 12) {
-                IconTile(symbol: "shippingbox.fill", colors: [Color(red: 0.25, green: 0.25, blue: 0.28), Color(red: 0.08, green: 0.08, blue: 0.10)], size: 30)
+                IconTile(symbol: "shippingbox.fill", colors: Brand.graphite, size: 30)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Ollama").font(.system(size: 13, weight: .semibold))
                     Text(version.map { tr("\($0) 正在运行", "\($0) running") } ?? (checked ? tr("没检测到。装好并打开后点「重新检测」", "Not detected. Install and open it, then click Check Again") : tr("检测中…", "Checking…")))
@@ -1089,7 +1111,7 @@ private struct OllamaCatalog: View {
         let inUse = settings.value.provider(settings.value.visionSlot.providerID)?.kind == .ollama
             && settings.value.visionSlot.model == model.id
         return HStack(spacing: 12) {
-            IconTile(symbol: model.symbol, colors: [Color(red: 0.36, green: 0.62, blue: 1.0), Color(red: 0.42, green: 0.36, blue: 0.95)], size: 30)
+            IconTile(symbol: model.symbol, colors: Brand.graphite, size: 30)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(model.name).font(.system(size: 13, weight: .semibold))
@@ -1104,7 +1126,7 @@ private struct OllamaCatalog: View {
             }
             Spacer()
             if inUse {
-                StatusPill(text: tr("正在用", "In Use"), color: .accentColor, symbol: "checkmark")
+                StatusPill(text: tr("正在用", "In Use"), color: Brand.accent, symbol: "checkmark")
             } else if isInstalled {
                 Button(tr("用这个", "Use This")) { use(model.id) }
             } else if downloading[model.id] != nil {
@@ -1160,12 +1182,21 @@ private struct AppearancePage: View {
     var body: some View {
         Form {
             Section {
-                Row(symbol: "globe", tint: .blue, title: tr("界面语言 · Language", "Language")) {
+                Row(symbol: "globe", title: tr("界面语言 · Language", "Language")) {
                     Picker("", selection: $settings.value.language) {
                         ForEach(AppLanguage.allCases) { Text($0.label).tag($0) }
                     }
                     .labelsHidden()
                     .frame(maxWidth: 200)
+                }
+                Row(symbol: "square.grid.2x2", title: tr("侧栏图标", "Sidebar Icons"),
+                    detail: tr("设置窗口左边的图标块：统一石墨色，或每页一个颜色", "Icon tiles in this window's sidebar: all graphite, or one color per page")) {
+                    Picker("", selection: $settings.value.iconStyle) {
+                        ForEach(IconStyle.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 160)
                 }
             }
             Section {
@@ -1179,7 +1210,7 @@ private struct AppearancePage: View {
                 Text(tr("主题", "Theme"))
             }
             Section {
-                Row(symbol: "circle.lefthalf.filled", tint: .pink, title: tr("底色浓度", "Tint"), detail: tr("最左边完全透明；往右先出现玻璃，再加深底色", "Fully transparent at the far left; moving right adds glass first, then a darker tint")) {
+                Row(symbol: "circle.lefthalf.filled", title: tr("底色浓度", "Tint"), detail: tr("最左边完全透明；往右先出现玻璃，再加深底色", "Fully transparent at the far left; moving right adds glass first, then a darker tint")) {
                     HStack(spacing: 8) {
                         Image(systemName: "circle.dotted").foregroundStyle(.secondary)
                         Slider(value: $settings.value.overlayOpacity, in: 0...0.95).frame(width: 200)
@@ -1188,7 +1219,7 @@ private struct AppearancePage: View {
                             .foregroundStyle(.secondary).frame(width: 34, alignment: .trailing)
                     }
                 }
-                Row(symbol: "textformat.size", tint: .pink, title: tr("字号", "Font Size")) {
+                Row(symbol: "textformat.size", title: tr("字号", "Font Size")) {
                     HStack(spacing: 8) {
                         Image(systemName: "textformat.size.smaller").foregroundStyle(.secondary)
                         Slider(value: $settings.value.fontSize, in: 11...24, step: 1).frame(width: 200)
@@ -1229,9 +1260,9 @@ private struct ThemeSwatch: View {
             VStack(alignment: .leading, spacing: 8) {
                 ZStack(alignment: .bottomLeading) {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(LinearGradient(colors: [colors.tint.opacity(0.9), colors.tint], startPoint: .top, endPoint: .bottom))
+                        .fill(colors.tint)
                     VStack(alignment: .leading, spacing: 5) {
-                        Capsule().fill(colors.accentGradient).frame(width: 46, height: 7)
+                        Capsule().fill(colors.accent).frame(width: 46, height: 7)
                         Capsule().fill(.white.opacity(0.8)).frame(width: 70, height: 5)
                         Capsule().fill(colors.translation.opacity(0.6)).frame(width: 56, height: 5)
                         HStack(spacing: 4) {
@@ -1247,13 +1278,13 @@ private struct ThemeSwatch: View {
                 .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.white.opacity(0.12)))
                 HStack(spacing: 5) {
                     Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                        .foregroundStyle(selected ? Brand.accent : Color.secondary)
                     Text(theme.label.components(separatedBy: CharacterSet(charactersIn: "：:")).first ?? "").font(.system(size: 12, weight: .semibold))
                 }
             }
             .padding(8)
             .background(RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .strokeBorder(selected ? Color.accentColor : .clear, lineWidth: 1.5))
+                .strokeBorder(selected ? Brand.accent : .clear, lineWidth: 1.5))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1277,7 +1308,7 @@ private struct ShortcutsPage: View {
         Form {
             Section {
                 ForEach(items, id: \.title) { item in
-                    Row(symbol: item.symbol, tint: .gray, title: item.title) {
+                    Row(symbol: item.symbol, title: item.title) {
                         HStack(spacing: 4) {
                             ForEach(item.keys, id: \.self) { Keycap(label: $0) }
                         }
@@ -1312,7 +1343,7 @@ private struct PermissionsPage: View {
     var body: some View {
         Form {
             Section {
-                Row(symbol: "mic.fill", tint: .green, title: tr("麦克风", "Microphone"), detail: tr("本地那一路", "The Local channel")) {
+                Row(symbol: "mic.fill", title: tr("麦克风", "Microphone"), detail: tr("本地那一路", "The Local channel")) {
                     HStack(spacing: 8) {
                         switch microphone {
                         case .granted: StatusPill(text: tr("已允许", "Allowed"), color: .green, symbol: "checkmark")
@@ -1322,10 +1353,10 @@ private struct PermissionsPage: View {
                         Button(tr("打开设置", "Open Settings")) { Capture.openPrivacySettings("Privacy_Microphone") }
                     }
                 }
-                Row(symbol: "speaker.wave.2.fill", tint: .blue, title: tr("系统录音", "System Audio Recording"), detail: tr("远端那一路，第一次开始听时询问", "The Remote channel; asked the first time you start listening")) {
+                Row(symbol: "speaker.wave.2.fill", title: tr("系统录音", "System Audio Recording"), detail: tr("远端那一路，第一次开始听时询问", "The Remote channel; asked the first time you start listening")) {
                     Button(tr("打开设置", "Open Settings")) { Capture.openPrivacySettings("Privacy_ScreenCapture") }
                 }
-                Row(symbol: "camera.viewfinder", tint: .teal, title: tr("屏幕录制", "Screen Recording"), detail: tr("截屏回复", "Screenshot Reply")) {
+                Row(symbol: "camera.viewfinder", title: tr("屏幕录制", "Screen Recording"), detail: tr("截屏回复", "Screenshot Reply")) {
                     HStack(spacing: 8) {
                         StatusPill(text: screen ? tr("已允许", "Allowed") : tr("未允许", "Not Allowed"), color: screen ? .green : .orange,
                                    symbol: screen ? "checkmark" : "exclamationmark")
@@ -1340,7 +1371,7 @@ private struct PermissionsPage: View {
 
             Section {
                 folderRow(tr("会话记录", "Session Transcripts"), symbol: "tray.full.fill", url: SessionModel.folder)
-                folderRow(tr("技能", "Skills"), symbol: "wand.and.sparkles", url: SkillStore.folder)
+                folderRow(tr("技能", "Skills"), symbol: "book.closed", url: SkillStore.folder)
                 folderRow(tr("运行日志", "Run Log"), symbol: "doc.text.magnifyingglass", url: URL.libraryDirectory.appending(path: "Logs/Tyto.log"))
             } header: {
                 Text(tr("数据放在哪", "Where Data Is Stored"))
@@ -1350,7 +1381,7 @@ private struct PermissionsPage: View {
 
             Section {
                 HStack(spacing: 14) {
-                    IconTile(symbol: "ear.fill", colors: SettingsPage.session.colors, size: 52)
+                    IconTile(symbol: "ear.fill", colors: Brand.graphite, size: 52)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(tr("Tyto 听译", "Tyto")).font(.system(size: 16, weight: .bold))
                         Text(tr("版本 \(version)", "Version \(version)"))
@@ -1373,7 +1404,7 @@ private struct PermissionsPage: View {
     }
 
     private func folderRow(_ title: String, symbol: String, url: URL) -> some View {
-        Row(symbol: symbol, tint: .blue, title: title, detail: url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) {
+        Row(symbol: symbol, title: title, detail: url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) {
             Button(tr("在 Finder 中显示", "Show in Finder")) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
         }
     }

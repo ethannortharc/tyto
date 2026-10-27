@@ -213,8 +213,9 @@ struct OverlayView: View {
     private var emptyState: some View {
         VStack(spacing: 14) {
             ZStack {
-                Circle().fill(theme.accentGradient).opacity(0.18).frame(width: 64, height: 64)
-                Image(systemName: "waveform").font(.system(size: 26, weight: .medium)).foregroundStyle(theme.accentGradient)
+                Circle().fill(theme.accent.opacity(0.10)).frame(width: 64, height: 64)
+                    .overlay(Circle().strokeBorder(theme.accent.opacity(0.22), lineWidth: 1))
+                Image(systemName: "waveform").font(.system(size: 24, weight: .regular)).foregroundStyle(theme.accent)
             }
             VStack(spacing: 6) {
                 Text(tr("准备好了", "Ready")).font(.system(size: 16, weight: .semibold))
@@ -424,12 +425,12 @@ struct PillButton: View {
                 Text(title)
             }
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(prominent ? Color.black.opacity(0.85) : .white.opacity(0.85))
+            .foregroundStyle(prominent ? theme.onAccent : .white.opacity(0.85))
             .padding(.horizontal, 12)
             .frame(height: 28)
             .background {
                 if prominent {
-                    Capsule().fill(theme.accentGradient).brightness(hovered ? 0.06 : 0)
+                    Capsule().fill(theme.accent).brightness(hovered ? 0.06 : 0)
                 } else {
                     Capsule().fill(.white.opacity(hovered ? 0.14 : 0.08))
                 }
@@ -614,11 +615,11 @@ private struct ReplyCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.white.opacity(0.15)))
             } else {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(theme.accentGradient)
+                Image(systemName: "text.bubble")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(theme.accent)
                     .frame(width: 26, height: 26)
-                    .background(Circle().fill(theme.accent.opacity(0.14)))
+                    .background(Circle().fill(theme.accent.opacity(0.12)))
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(reply.isScreenshot ? tr("截屏回复", "Screenshot Reply") : tr("回复建议", "Suggested Reply")).font(.system(size: 12.5, weight: .semibold))
@@ -690,7 +691,7 @@ private struct ReplyCard: View {
         .padding(.leading, 4)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.accent.opacity(copied ? 0.14 : 0.08)))
         .overlay(alignment: .leading) {
-            Capsule().fill(theme.accentGradient).frame(width: 3).padding(.vertical, 10).padding(.leading, 5)
+            Capsule().fill(theme.accent.opacity(0.85)).frame(width: 3).padding(.vertical, 10).padding(.leading, 5)
         }
     }
 
@@ -724,8 +725,7 @@ private struct AppearancePopover: View {
                     Button { settings.value.theme = id } label: {
                         VStack(spacing: 5) {
                             Circle()
-                                .fill(LinearGradient(colors: [theme.accent, theme.accentEnd], startPoint: .topLeading,
-                                                     endPoint: .bottomTrailing))
+                                .fill(theme.accent)
                                 .frame(width: 26, height: 26)
                                 .overlay(Circle().strokeBorder(theme.tint, lineWidth: 5).opacity(0.9))
                                 .overlay(Circle().strokeBorder(settings.value.theme == id ? Color.white : .clear, lineWidth: 2)
