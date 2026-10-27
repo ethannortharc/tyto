@@ -1,3 +1,5 @@
+<img src="docs/icon.png" width="128" alt="Tyto icon">
+
 # Tyto
 
 **English** | [中文](README.zh-CN.md)
