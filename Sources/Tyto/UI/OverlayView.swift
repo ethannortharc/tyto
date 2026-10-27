@@ -164,10 +164,10 @@ struct OverlayView: View {
                 }
             }
             Spacer(minLength: 0)
-            Button { session.notice = nil } label: {
-                Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(theme.ink.opacity(0.6))
-            }
-            .buttonStyle(.plain)
+            // 整个圆都能点（原来只有 10 点大的 × 那几个像素能点中，几乎关不掉）
+            IconButton(symbol: "xmark", theme: theme, help: tr("关掉提示", "Dismiss"), size: 24) { session.notice = nil }
+                .padding(.top, -4)
+                .padding(.trailing, -4)
         }
         .padding(10)
         // 提示条盖在字幕上面，底要实，不然下面的字会透出来
@@ -555,6 +555,8 @@ private struct RowView: View {
                             Image(systemName: "text.bubble")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(theme.accent.opacity(0.85))
+                            .frame(width: 22, height: 22)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .help(tr("这句在回应一条回复建议，点一下看对比", "This answers a suggested reply; click to compare"))
