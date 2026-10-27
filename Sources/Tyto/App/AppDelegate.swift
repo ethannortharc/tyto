@@ -70,7 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 contentRect: NSRect(x: 0, y: 0, width: 900, height: 680),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered, defer: false)
-            window.title = "Tyto 听译"
+            window.title = Self.windowTitle
             window.titlebarAppearsTransparent = true
             window.toolbarStyle = .unified
             window.isReleasedWhenClosed = false
@@ -81,10 +81,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             window.setFrameAutosaveName("TytoMain")
             mainWindow = window
         }
+        mainWindow?.title = Self.windowTitle  // 语言可能改过
         NSApp.activate()
         mainWindow?.makeKeyAndOrderFront(nil)
         mainWindow?.orderFrontRegardless()
     }
+
+    private static var windowTitle: String { tr("Tyto 听译", "Tyto") }
 
     private func toggleOverlay() {
         guard let overlay else { return }
@@ -125,7 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "ear", accessibilityDescription: "Tyto 听译")
+        item.button?.image = NSImage(systemSymbolName: "ear", accessibilityDescription: "Tyto")
         let menu = NSMenu()
         menu.delegate = self
         item.menu = menu

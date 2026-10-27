@@ -10,8 +10,8 @@ struct AppSettings: Codable, Equatable {
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .apple: "Apple 本机翻译（免费、不联网）"
-            case .llm: "大模型翻译（用下面的大模型设置）"
+            case .apple: tr("Apple 本机翻译（免费、不联网）", "Apple on-device (free, offline)")
+            case .llm: tr("大模型翻译（用下面的大模型设置）", "LLM (uses the model set below)")
             }
         }
     }
@@ -68,16 +68,16 @@ struct AppSettings: Codable, Equatable {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .imageAndText: "图片直接给回复模型"
-            case .visionModel: "先用看图模型读图"
-            case .textOnly: "只用本机 OCR"
+            case .imageAndText: tr("图片直接给回复模型", "Image to Reply Model")
+            case .visionModel: tr("先用看图模型读图", "Vision Model First")
+            case .textOnly: tr("只用本机 OCR", "On-Device OCR Only")
             }
         }
         var detail: String {
             switch self {
-            case .imageAndText: "回复模型自己看截图，再配上本机 OCR 的文字核对人名数字。最准，图片会发给模型服务。"
-            case .visionModel: "看图模型先把截图整理成文字，回复模型只看文字。看图模型选本机的，图片就不出这台 Mac。"
-            case .textOnly: "系统自带的文字识别，免下载、不联网、0.3 秒。看不到版面，谁发的只能按左右位置猜。"
+            case .imageAndText: tr("回复模型自己看截图，再配上本机 OCR 的文字核对人名数字。最准，图片会发给模型服务。", "The reply model reads the screenshot itself, and on-device OCR text is used to check names and numbers. Most accurate; the image is sent to the model service.")
+            case .visionModel: tr("看图模型先把截图整理成文字，回复模型只看文字。看图模型选本机的，图片就不出这台 Mac。", "A vision model turns the screenshot into text, and the reply model only sees the text. Pick an on-device vision model and the image never leaves this Mac.")
+            case .textOnly: tr("系统自带的文字识别，免下载、不联网、0.3 秒。看不到版面，谁发的只能按左右位置猜。", "Built-in text recognition: no download, offline, about 0.3 s. It can't see the layout, so who said what is guessed from left/right position.")
             }
         }
         var symbol: String {
@@ -99,9 +99,9 @@ struct AppSettings: Codable, Equatable {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .frontWindow: "最前面的 App"
-            case .screen: "整个屏幕"
-            case .region: "框选"
+            case .frontWindow: tr("最前面的 App", "Frontmost App")
+            case .screen: tr("整个屏幕", "Entire Screen")
+            case .region: tr("框选", "Select Area")
             }
         }
         var symbol: String {

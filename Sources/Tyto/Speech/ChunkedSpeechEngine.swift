@@ -37,7 +37,7 @@ final class ChunkedSpeechEngine: SpeechEngine, @unchecked Sendable {
                     if !text.isEmpty { sink.yield(SpeechEvent(kind: .final, text: text)) }
                     sink.yield(SpeechEvent(kind: .endOfUtterance))
                 } catch {
-                    sink.yield(SpeechEvent(kind: .error, text: "转写失败：\(error.localizedDescription)"))
+                    sink.yield(SpeechEvent(kind: .error, text: tr("转写失败：\(error.localizedDescription)", "Transcription failed: \(error.localizedDescription)")))
                     sink.yield(SpeechEvent(kind: .partial))
                 }
             }
@@ -107,7 +107,7 @@ final class ChunkedSpeechEngine: SpeechEngine, @unchecked Sendable {
         let json = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {
             let message = (json["error"] as? [String: Any])?["message"] as? String ?? String(decoding: data.prefix(200), as: UTF8.self)
-            throw TytoError.server("接口返回 \(http.statusCode)：\(message)")
+            throw TytoError.server(tr("接口返回 \(http.statusCode)：\(message)", "API returned \(http.statusCode): \(message)"))
         }
         return json
     }

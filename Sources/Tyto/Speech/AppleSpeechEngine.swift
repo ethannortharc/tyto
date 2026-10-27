@@ -57,7 +57,7 @@ final class AppleSpeechEngine: SpeechEngine, @unchecked Sendable {
                     sink.yield(SpeechEvent(kind: result.isFinal ? .final : .partial, text: text, language: language))
                 }
             } catch {
-                sink.yield(SpeechEvent(kind: .error, text: "本机识别出错：\(error.localizedDescription)"))
+                sink.yield(SpeechEvent(kind: .error, text: tr("本机识别出错：\(error.localizedDescription)", "On-device recognition error: \(error.localizedDescription)")))
             }
         }
     }

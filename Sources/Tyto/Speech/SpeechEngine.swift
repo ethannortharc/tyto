@@ -35,7 +35,7 @@ enum SpeechEngines {
         case .apple:
             return AppleSpeechEngine(locale: channel == .remote ? settings.remoteLocale : settings.localLocale)
         case .streaming:
-            let resolved = try settings.resolve(settings.speechSlot, for: "语音识别")
+            let resolved = try settings.resolve(settings.speechSlot, for: tr("语音识别", "speech recognition"))
             let provider = resolved.provider
             switch provider.kind {
             case .soniox:
@@ -45,14 +45,14 @@ enum SpeechEngines {
                 return DeepgramSpeechEngine(apiKey: provider.key ?? "", baseURL: provider.baseURL, model: resolved.model,
                                             language: hints.count == 1 ? hints[0] : "multi")
             default:
-                throw TytoError.server("「\(provider.name)」不是实时识别服务，请选 Soniox 或 Deepgram")
+                throw TytoError.server(tr("「\(provider.name)」不是实时识别服务，请选 Soniox 或 Deepgram", "“\(provider.name)” isn't a real-time recognition service; pick Soniox or Deepgram"))
             }
         case .transcription, .audioModel:
-            let resolved = try settings.resolve(settings.speechSlot, for: "语音识别")
+            let resolved = try settings.resolve(settings.speechSlot, for: tr("语音识别", "speech recognition"))
             let provider = resolved.provider
             guard provider.kind == .openAICompatible || provider.kind == .ollama,
                   let url = URL(string: provider.baseURL.trimmingCharacters(in: .whitespaces)) else {
-                throw TytoError.server("「\(provider.name)」不能用来转写，请选 OpenAI 兼容的服务商")
+                throw TytoError.server(tr("「\(provider.name)」不能用来转写，请选 OpenAI 兼容的服务商", "“\(provider.name)” can't be used for transcription; pick an OpenAI-compatible provider"))
             }
             let backend: ChunkedSpeechEngine.Backend = settings.speechMethod == .transcription
                 ? .transcription(baseURL: url, apiKey: provider.key, model: resolved.model,

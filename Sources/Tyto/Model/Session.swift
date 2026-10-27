@@ -5,7 +5,7 @@ import Foundation
 /// 每行确定后翻译；点某几行或"最近的话"生成回复建议。
 @MainActor
 final class SessionModel: ObservableObject {
-    @Published var title = "新会议" { didSet { scheduleSave() } }
+    @Published var title = tr("新会议", "New Meeting") { didSet { scheduleSave() } }
     @Published var context = "" { didSet { scheduleSave() } }
     @Published var activeSkillIDs: Set<String> = ["01-general"] { didSet { scheduleSave() } }
     @Published var speakerNames: [String: String] = [:] { didSet { scheduleSave() } }
@@ -75,7 +75,7 @@ final class SessionModel: ObservableObject {
         if current.captureRemote { channels.append(.remote) }
         if current.captureLocal { channels.append(.local) }
         guard !channels.isEmpty else {
-            notice = "远端和本地都关着，没有声音可听（模型与服务 → 声音来源）"
+            notice = tr("远端和本地都关着，没有声音可听（模型与服务 → 声音来源）", "Remote and Local are both off, so there is nothing to listen to (Listening → Audio Sources)")
             return
         }
 
@@ -94,7 +94,7 @@ final class SessionModel: ObservableObject {
         if channel == .local {
             RunLog.write("本地：请求麦克风权限")
             guard await MicrophoneCapture.requestPermission() else {
-                notice = "没有麦克风权限：系统设置 → 隐私与安全性 → 麦克风 → 打开 Tyto"
+                notice = tr("没有麦克风权限：系统设置 → 隐私与安全性 → 麦克风 → 打开 Tyto", "No microphone permission: System Settings → Privacy & Security → Microphone → turn on Tyto")
                 RunLog.write(notice ?? "")
                 return
             }
@@ -138,7 +138,7 @@ final class SessionModel: ObservableObject {
                 startTicking()
             }
         } catch {
-            notice = "\(channel.label)没启动：\(error.localizedDescription)"
+            notice = tr("\(channel.label)没启动：\(error.localizedDescription)", "\(channel.label) failed to start: \(error.localizedDescription)")
             RunLog.write(notice ?? "")
         }
     }
@@ -181,8 +181,8 @@ final class SessionModel: ObservableObject {
         for (channel, started) in startedAt where !heard.contains(channel) && now.timeIntervalSince(started) > 20 {
             startedAt[channel] = nil
             notice = channel == .remote
-                ? "远端 20 秒都没收到声音。如果会议里有人在说话，检查：系统设置 → 隐私与安全性 → 录屏与系统录音 → 「仅系统录音」里打开 Tyto"
-                : "本地 20 秒都没收到声音，检查：系统设置 → 隐私与安全性 → 麦克风 → 打开 Tyto"
+                ? tr("远端 20 秒都没收到声音。如果会议里有人在说话，检查：系统设置 → 隐私与安全性 → 录屏与系统录音 → 「仅系统录音」里打开 Tyto", "No sound from Remote for 20 seconds. If someone is speaking in the meeting, check System Settings → Privacy & Security → Screen & System Audio Recording → turn on Tyto under “System Audio Recording Only”")
+                : tr("本地 20 秒都没收到声音，检查：系统设置 → 隐私与安全性 → 麦克风 → 打开 Tyto", "No sound from Local for 20 seconds. Check System Settings → Privacy & Security → Microphone → turn on Tyto")
             RunLog.write(notice ?? "")
         }
         for (channel, id) in openRow {
@@ -358,7 +358,7 @@ final class SessionModel: ObservableObject {
         case .apple:
             return appleTranslator
         case .llm:
-            return LLMTranslator(client: try LLMFactory.make(current.effectiveTranslationSlot, for: "翻译", in: current))
+            return LLMTranslator(client: try LLMFactory.make(current.effectiveTranslationSlot, for: tr("翻译", "translation"), in: current))
         }
     }
 
@@ -369,7 +369,7 @@ final class SessionModel: ObservableObject {
         let current = settings.value
         let client: LLMClient
         do {
-            client = try LLMFactory.make(current.replySlot, for: "回复", in: current)
+            client = try LLMFactory.make(current.replySlot, for: tr("回复", "reply"), in: current)
         } catch {
             notice = error.localizedDescription
             return
@@ -377,7 +377,7 @@ final class SessionModel: ObservableObject {
 
         let targets = ids.map { wanted in rows.filter { wanted.contains($0.id) } } ?? recentRowsToAnswer()
         guard let last = targets.last, let lastIndex = rows.firstIndex(where: { $0.id == last.id }) else {
-            notice = "还没有可以回复的话"
+            notice = tr("还没有可以回复的话", "Nothing to reply to yet")
             return
         }
         let context = Array(rows[max(0, lastIndex - 59)...lastIndex])
@@ -388,9 +388,9 @@ final class SessionModel: ObservableObject {
         if let previous = replies.indices.last, replies[previous].isStreaming {
             replyTask?.cancel()
             replies[previous].isStreaming = false
-            replies[previous].error = "被新的回复打断"
+            replies[previous].error = tr("被新的回复打断", "Interrupted by a new reply")
         }
-        let reply = Reply(target: ids == nil ? "最近的话" : "选中的 \(targets.count) 句")
+        let reply = Reply(target: ids == nil ? tr("最近的话", "Latest") : tr("选中的 \(targets.count) 句", "\(targets.count) selected"))
         replies.append(reply)
         let replyID = reply.id
         replyTask = Task { [weak self] in
@@ -400,7 +400,7 @@ final class SessionModel: ObservableObject {
                 }
                 self?.updateReply(replyID) { $0.isStreaming = false }
             } catch {
-                let message = error is CancellationError ? "已停止" : error.localizedDescription
+                let message = error is CancellationError ? tr("已停止", "Stopped") : error.localizedDescription
                 self?.updateReply(replyID) {
                     if $0.isStreaming { $0.error = message }
                     $0.isStreaming = false
@@ -460,7 +460,7 @@ final class SessionModel: ObservableObject {
     /// 用剪贴板里的图片生成回复
     func replyToClipboardImage() {
         guard let png = Screenshot.clipboardImage() else {
-            notice = "剪贴板里没有图片。可以用 ⌘⌃⇧4 截一块屏幕到剪贴板，或者直接按 ⌃⌥S。"
+            notice = tr("剪贴板里没有图片。可以用 ⌘⌃⇧4 截一块屏幕到剪贴板，或者直接按 ⌃⌥S。", "No image on the clipboard. Use ⌘⌃⇧4 to copy part of the screen to the clipboard, or just press ⌃⌥S.")
             return
         }
         replyToScreenshot(CapturedImage(png: png, appName: nil, bundleID: nil, windowTitle: nil))
@@ -472,9 +472,9 @@ final class SessionModel: ObservableObject {
         let client: LLMClient
         let visionClient: LLMClient?
         do {
-            client = try LLMFactory.make(current.replySlot, for: "回复", in: current)
+            client = try LLMFactory.make(current.replySlot, for: tr("回复", "reply"), in: current)
             visionClient = current.screenshotMode == .visionModel
-                ? try LLMFactory.make(current.visionSlot, for: "看图", in: current) : nil
+                ? try LLMFactory.make(current.visionSlot, for: tr("看图", "vision"), in: current) : nil
         } catch {
             notice = error.localizedDescription
             return
@@ -482,13 +482,13 @@ final class SessionModel: ObservableObject {
         if let previous = replies.indices.last, replies[previous].isStreaming {
             replyTask?.cancel()
             replies[previous].isStreaming = false
-            replies[previous].error = "被新的回复打断"
+            replies[previous].error = tr("被新的回复打断", "Interrupted by a new reply")
         }
-        var reply = Reply(target: image.appName.map { "截图 · \($0)" } ?? "截图")
+        var reply = Reply(target: image.appName.map { tr("截图 · \($0)", "Screenshot · \($0)") } ?? tr("截图", "Screenshot"))
         reply.source = "screenshot"
         reply.thumbnail = Screenshot.thumbnail(image.png)
         reply.instruction = instruction
-        reply.status = "本机 OCR 识别文字…"
+        reply.status = tr("本机 OCR 识别文字…", "Reading text with on-device OCR…")
         replies.append(reply)
         let replyID = reply.id
         screenshotImages[replyID] = image
@@ -509,7 +509,7 @@ final class SessionModel: ObservableObject {
                     })
                 self?.finishScreenshotReply(replyID, copyFirst: current.copyFirstScreenshotReply)
             } catch {
-                let message = error is CancellationError ? "已停止" : error.localizedDescription
+                let message = error is CancellationError ? tr("已停止", "Stopped") : error.localizedDescription
                 self?.updateReply(replyID) {
                     if $0.isStreaming { $0.error = message }
                     $0.isStreaming = false
@@ -523,7 +523,7 @@ final class SessionModel: ObservableObject {
     /// 带着新的要求（比如"婉拒""用中文"）对同一张截图重新生成
     func regenerateScreenshotReply(_ id: UUID, instruction: String) {
         guard let image = screenshotImages[id] else {
-            notice = "原图已经不在了（重启过 Tyto），请重新截一次"
+            notice = tr("原图已经不在了（重启过 Tyto），请重新截一次", "The original image is gone (Tyto was restarted); please capture again")
             return
         }
         replyToScreenshot(image, instruction: instruction)
@@ -555,7 +555,7 @@ final class SessionModel: ObservableObject {
     }
 
     func defaultSpeakerLabel(_ row: Utterance) -> String {
-        row.speaker.map { "\(row.channel.label)·说话人\($0)" } ?? row.channel.label
+        row.speaker.map { tr("\(row.channel.label)·说话人\($0)", "\(row.channel.label) · Speaker \($0)") } ?? row.channel.label
     }
 
     func rename(_ key: String, to name: String) {
@@ -656,7 +656,7 @@ final class SessionModel: ObservableObject {
         replies = []
         selection = []
         speakerNames = [:]
-        title = "新会议"
+        title = tr("新会议", "New Meeting")
         save()
     }
 
@@ -666,15 +666,15 @@ final class SessionModel: ObservableObject {
         var text = "# \(title)\n\n"
         if let first = rows.first { text += "\(formatter.string(from: first.startedAt))\n\n" }
         let background = context.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !background.isEmpty { text += "## 背景\n\n\(background)\n\n" }
-        text += "## 记录\n\n"
+        if !background.isEmpty { text += tr("## 背景\n\n\(background)\n\n", "## Context\n\n\(background)\n\n") }
+        text += tr("## 记录\n\n", "## Transcript\n\n")
         formatter.dateFormat = "HH:mm:ss"
         for row in rows {
             text += "- **\(speakerLabel(row))** \(formatter.string(from: row.startedAt))：\(row.displayText)\n"
-            if let translation = row.translation { text += "  - 译：\(translation)\n" }
+            if let translation = row.translation { text += tr("  - 译：\(translation)\n", "  - Translation: \(translation)\n") }
         }
         if !replies.isEmpty {
-            text += "\n## 回复建议\n"
+            text += tr("\n## 回复建议\n", "\n## Suggested Replies\n")
             for reply in replies {
                 text += "\n### \(formatter.string(from: reply.createdAt)) · \(reply.target)\n\n\(reply.text)\n"
             }
@@ -722,7 +722,7 @@ enum ScreenshotReplier {
 
         // 先用看图模型把截图整理成文字（看图模型是本机的，图片就不出这台 Mac）
         if let visionClient {
-            status("看图模型读截图（\(current.visionSlot.model)）…")
+            status(tr("看图模型读截图（\(current.visionSlot.model)）…", "Vision model is reading the screenshot (\(current.visionSlot.model))…"))
             let prompt = VisionPrompt(model: current.visionSlot.model, source: image.source)
             let reading = try await visionClient.complete(system: prompt.system, user: prompt.user,
                                                           images: [Screenshot.forModel(image.png)], maxTokens: 4_000)
@@ -732,7 +732,7 @@ enum ScreenshotReplier {
         let withImage = current.screenshotMode == .imageAndText
         let prompt = ScreenshotPrompt(settings: current, context: context, skills: skills, source: image.source,
                                       ocr: ocr, imageAttached: withImage, instruction: instruction)
-        status("生成回复…")
+        status(tr("生成回复…", "Writing reply…"))
         for try await chunk in client.stream(system: prompt.system, user: prompt.user,
                                              images: withImage ? [Screenshot.forModel(image.png)] : [],
                                              maxTokens: 16_000) {

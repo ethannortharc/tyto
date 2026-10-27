@@ -9,9 +9,9 @@ enum ThemeID: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .obsidian: "曜石：石墨底，青紫强调"
-        case .aurora: "极光：深蓝底，青绿强调"
-        case .champagne: "香槟：暖黑底，金色强调"
+        case .obsidian: tr("曜石：石墨底，青紫强调", "Obsidian: graphite, violet accent")
+        case .aurora: tr("极光：深蓝底，青绿强调", "Aurora: deep blue, teal accent")
+        case .champagne: tr("香槟：暖黑底，金色强调", "Champagne: warm black, gold accent")
         }
     }
 }

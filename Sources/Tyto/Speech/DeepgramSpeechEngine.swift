@@ -98,7 +98,7 @@ final class DeepgramSpeechEngine: SpeechEngine, @unchecked Sendable {
                 handle(Data(text.utf8))
             } catch {
                 if !lock.withLock({ stopping }) {
-                    eventSink.yield(SpeechEvent(kind: .error, text: "Deepgram 连接断了：\(error.localizedDescription)"))
+                    eventSink.yield(SpeechEvent(kind: .error, text: tr("Deepgram 连接断了：\(error.localizedDescription)", "Deepgram connection lost: \(error.localizedDescription)")))
                 }
                 lock.withLock { self.socket = nil }
                 return
@@ -129,7 +129,7 @@ final class DeepgramSpeechEngine: SpeechEngine, @unchecked Sendable {
             }
         default:
             if let message = json["err_msg"] as? String ?? json["description"] as? String {
-                eventSink.yield(SpeechEvent(kind: .error, text: "Deepgram 出错：\(message)"))
+                eventSink.yield(SpeechEvent(kind: .error, text: tr("Deepgram 出错：\(message)", "Deepgram error: \(message)")))
             }
         }
     }

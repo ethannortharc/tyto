@@ -5,7 +5,7 @@ enum ModelList {
     static func fetch(_ provider: Provider) async throws -> [String] {
         let base = provider.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let baseURL = URL(string: base.isEmpty ? provider.info.baseURL : base) else {
-            throw TytoError.server("接口地址不对")
+            throw TytoError.server(tr("接口地址不对", "Invalid endpoint address"))
         }
         switch provider.kind {
         case .anthropic:
@@ -31,7 +31,7 @@ enum ModelList {
         request.timeoutInterval = 15
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-            throw TytoError.server("读模型列表失败（\(http.statusCode)）")
+            throw TytoError.server(tr("读模型列表失败（\(http.statusCode)）", "Couldn't load the model list (\(http.statusCode))"))
         }
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let items = json[list] as? [[String: Any]] else { return [] }
@@ -53,14 +53,14 @@ enum Ollama {
         let symbol: String
     }
 
-    static let recommended: [Recommended] = [
+    static var recommended: [Recommended] { [
         Recommended(id: "qwen3-vl:2b-instruct", name: "Qwen3-VL 2B", size: "1.9 GB",
-                    note: "推荐：认字又看得懂聊天和邮件，16 GB 笔记本上几秒一张", symbol: "star.fill"),
+                    note: tr("推荐：认字又看得懂聊天和邮件，16 GB 笔记本上几秒一张", "Recommended: reads text and understands chats and emails; a few seconds per image on a 16 GB laptop"), symbol: "star.fill"),
         Recommended(id: "glm-ocr:q8_0", name: "GLM-OCR 0.9B", size: "1.8 GB",
-                    note: "最小：专门把图里的字转出来（文档 OCR 评测第一），中英文、表格都行；不理解内容", symbol: "doc.text.viewfinder"),
+                    note: tr("最小：专门把图里的字转出来（文档 OCR 评测第一），中英文、表格都行；不理解内容", "Smallest: built just to extract text from images (top of document OCR benchmarks); Chinese, English and tables all work; doesn't understand the content"), symbol: "doc.text.viewfinder"),
         Recommended(id: "qwen3-vl:4b-instruct", name: "Qwen3-VL 4B", size: "3.3 GB",
-                    note: "更准：长邮件、复杂版面更稳，16 GB 内存也够", symbol: "sparkles"),
-    ]
+                    note: tr("更准：长邮件、复杂版面更稳，16 GB 内存也够", "More accurate: steadier on long emails and complex layouts; 16 GB of memory is enough"), symbol: "sparkles"),
+    ] }
 
     static func host(from baseURL: URL) -> URL {
         var components = URLComponents()
@@ -111,7 +111,7 @@ enum Ollama {
                     let (bytes, _) = try await URLSession.shared.bytes(for: request)
                     for try await line in bytes.lines {
                         guard let json = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { continue }
-                        if let error = json["error"] as? String { throw TytoError.server("下载失败：\(error)") }
+                        if let error = json["error"] as? String { throw TytoError.server(tr("下载失败：\(error)", "Download failed: \(error)")) }
                         let progress = Progress(status: json["status"] as? String ?? "",
                                                 completed: (json["completed"] as? NSNumber)?.int64Value,
                                                 total: (json["total"] as? NSNumber)?.int64Value)

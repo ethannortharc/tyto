@@ -62,8 +62,8 @@ final class SkillStore: ObservableObject {
     func create() -> Skill {
         var number = 1
         while skills.contains(where: { $0.id == "skill-\(number)" }) { number += 1 }
-        let skill = Skill(id: "skill-\(number)", name: "新技能", description: "什么时候用这个技能",
-                          body: "写给大模型的做法说明：回复时要注意什么、用什么语气、有哪些固定的说法。")
+        let skill = Skill(id: "skill-\(number)", name: tr("新技能", "New Skill"), description: tr("什么时候用这个技能", "When to use this skill"),
+                          body: tr("写给大模型的做法说明：回复时要注意什么、用什么语气、有哪些固定的说法。", "Instructions for the model: what to watch for in replies, what tone to use, and any set phrases."))
         save(skill)
         return skill
     }

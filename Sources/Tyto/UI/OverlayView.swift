@@ -60,9 +60,9 @@ struct OverlayView: View {
     private var header: some View {
         HStack(spacing: 10) {
             ListenButton(session: session, theme: theme)
-            SourceDot(label: "远端", on: settings.value.captureRemote, level: session.levels[.remote] ?? 0,
+            SourceDot(label: tr("远端", "Remote"), on: settings.value.captureRemote, level: session.levels[.remote] ?? 0,
                       color: theme.remote[0])
-            SourceDot(label: "本地", on: settings.value.captureLocal, level: session.levels[.local] ?? 0,
+            SourceDot(label: tr("本地", "Local"), on: settings.value.captureLocal, level: session.levels[.local] ?? 0,
                       color: theme.local[0])
             Spacer(minLength: 4)
             if ui.clickThrough {
@@ -73,19 +73,19 @@ struct OverlayView: View {
                     .lineLimit(1)
             }
             IconButton(symbol: "character.bubble", active: settings.value.translationEnabled, accent: theme.accent,
-                       help: settings.value.translationEnabled ? "隐藏译文" : "显示译文") {
+                       help: settings.value.translationEnabled ? tr("隐藏译文", "Hide Translation") : tr("显示译文", "Show Translation")) {
                 settings.value.translationEnabled.toggle()
                 session.translationToggled()
             }
             captureMenu
-            IconButton(symbol: "paintpalette", active: showAppearance, accent: theme.accent, help: "外观：主题、透明度、字号") {
+            IconButton(symbol: "paintpalette", active: showAppearance, accent: theme.accent, help: tr("外观：主题、透明度、字号", "Appearance: theme, tint, font size")) {
                 showAppearance.toggle()
             }
             .popover(isPresented: $showAppearance, arrowEdge: .bottom) {
                 AppearancePopover(settings: settings, ui: ui)
             }
             moreMenu
-            IconButton(symbol: "xmark", accent: theme.accent, help: "退出 Tyto（⌃⌥Q）", action: actions.quit)
+            IconButton(symbol: "xmark", accent: theme.accent, help: tr("退出 Tyto（⌃⌥Q）", "Quit Tyto (⌃⌥Q)"), action: actions.quit)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -96,7 +96,7 @@ struct OverlayView: View {
     /// 点一下按设置的方式截图；旁边的小箭头可以选别的方式
     private var captureMenu: some View {
         Menu {
-            Section("截屏回复") {
+            Section(tr("截屏回复", "Screenshot Reply")) {
                 ForEach(AppSettings.CaptureTarget.allCases) { target in
                     Button { session.captureAndReply(target) } label: {
                         Label(target == settings.value.captureTarget ? "\(target.title) ⌃⌥S"
@@ -106,7 +106,7 @@ struct OverlayView: View {
                 }
             }
             Button(action: session.replyToClipboardImage) {
-                Label("用剪贴板里的图片", systemImage: "doc.on.clipboard")
+                Label(tr("用剪贴板里的图片", "Use Image on Clipboard"), systemImage: "doc.on.clipboard")
             }
         } label: {
             Image(systemName: "camera.viewfinder")
@@ -119,25 +119,25 @@ struct OverlayView: View {
         .buttonStyle(.plain)
         .menuIndicator(.visible)
         .fixedSize()
-        .help("截屏回复：\(settings.value.captureTarget.title)（⌃⌥S），小箭头选别的方式")
+        .help(tr("截屏回复：\(settings.value.captureTarget.title)（⌃⌥S），小箭头选别的方式", "Screenshot Reply: \(settings.value.captureTarget.title) (⌃⌥S); use the arrow for other options"))
     }
 
     /// 更多：先是"去哪里"（设置的几个常用页），再是窗口操作
     private var moreMenu: some View {
         Menu {
             Section {
-                Button(action: actions.openMain) { Label("会话与设置…", systemImage: "gearshape") }
-                Button(action: session.replyToClipboardImage) { Label("用剪贴板里的图片回复", systemImage: "doc.on.clipboard") }
+                Button(action: actions.openMain) { Label(tr("会话与设置…", "Session & Settings…"), systemImage: "gearshape") }
+                Button(action: session.replyToClipboardImage) { Label(tr("用剪贴板里的图片回复", "Reply with Image on Clipboard"), systemImage: "doc.on.clipboard") }
             }
             Section {
                 Button { ui.clickThrough.toggle() } label: {
-                    Label(ui.clickThrough ? "关闭点击穿透 ⌃⌥P" : "点击穿透 ⌃⌥P", systemImage: "cursorarrow.motionlines")
+                    Label(ui.clickThrough ? tr("关闭点击穿透 ⌃⌥P", "Turn Off Click-Through ⌃⌥P") : tr("点击穿透 ⌃⌥P", "Click-Through ⌃⌥P"), systemImage: "cursorarrow.motionlines")
                 }
-                Button(action: actions.resetSize) { Label("恢复默认大小和位置", systemImage: "arrow.up.left.and.down.right.and.arrow.up.right.and.down.left") }
-                Button(action: actions.hide) { Label("隐藏悬浮窗 ⌃⌥T", systemImage: "eye.slash") }
+                Button(action: actions.resetSize) { Label(tr("恢复默认大小和位置", "Reset Size & Position"), systemImage: "arrow.up.left.and.down.right.and.arrow.up.right.and.down.left") }
+                Button(action: actions.hide) { Label(tr("隐藏悬浮窗 ⌃⌥T", "Hide Overlay ⌃⌥T"), systemImage: "eye.slash") }
             }
             Section {
-                Button(action: actions.quit) { Label("退出 Tyto ⌃⌥Q", systemImage: "power") }
+                Button(action: actions.quit) { Label(tr("退出 Tyto ⌃⌥Q", "Quit Tyto ⌃⌥Q"), systemImage: "power") }
             }
         } label: {
             Image(systemName: "ellipsis.circle")
@@ -149,7 +149,7 @@ struct OverlayView: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("更多")
+        .help(tr("更多", "More"))
     }
 
     private func noticeBanner(_ notice: String) -> some View {
@@ -217,13 +217,13 @@ struct OverlayView: View {
                 Image(systemName: "waveform").font(.system(size: 26, weight: .medium)).foregroundStyle(theme.accentGradient)
             }
             VStack(spacing: 6) {
-                Text("准备好了").font(.system(size: 16, weight: .semibold))
-                Text("点「开始听」或按 ⌃⌥L").font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.6))
+                Text(tr("准备好了", "Ready")).font(.system(size: 16, weight: .semibold))
+                Text(tr("点「开始听」或按 ⌃⌥L", "Click Start Listening or press ⌃⌥L")).font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.6))
             }
             VStack(alignment: .leading, spacing: 6) {
-                hint("waveform", "远端是会议软件里的声音，本地是麦克风")
-                hint("hand.tap", "点一句选中它，可以多选，再点「回复」")
-                hint("camera.viewfinder", "⌃⌥S 框选一块屏幕，帮你写好回复")
+                hint("waveform", tr("远端是会议软件里的声音，本地是麦克风", "Remote is the meeting app's audio; Local is the microphone"))
+                hint("hand.tap", tr("点一句选中它，可以多选，再点「回复」", "Click a line to select it (several are fine), then click Reply"))
+                hint("camera.viewfinder", tr("⌃⌥S 框选一块屏幕，帮你写好回复", "⌃⌥S selects part of the screen and drafts a reply"))
             }
             .padding(.top, 4)
         }
@@ -248,12 +248,12 @@ struct OverlayView: View {
                           maxHeight: max(120, height * (session.rows.isEmpty ? 0.65 : 0.4) - 60))
             }
             HStack(spacing: 8) {
-                PillButton(title: session.selection.isEmpty ? "回复最近的话" : "回复选中的 \(session.selection.count) 句",
+                PillButton(title: session.selection.isEmpty ? tr("回复最近的话", "Reply to Latest") : tr("回复选中的 \(session.selection.count) 句", "Reply to \(session.selection.count) Selected"),
                            symbol: "arrowshape.turn.up.left.fill", prominent: true, theme: theme, help: "⌃⌥R") {
                     session.reply(to: session.selection.isEmpty ? nil : Array(session.selection))
                 }
                 if !session.selection.isEmpty {
-                    PillButton(title: "清除选择", theme: theme) { session.selection = [] }
+                    PillButton(title: tr("清除选择", "Clear Selection"), theme: theme) { session.selection = [] }
                 }
                 Spacer(minLength: 0)
                 if let reply = shownReply { replyNavigation(reply) }
@@ -272,20 +272,20 @@ struct OverlayView: View {
         let index = session.replies.firstIndex { $0.id == reply.id } ?? 0
         HStack(spacing: 2) {
             if session.replies.count > 1 {
-                IconButton(symbol: "chevron.left", accent: theme.accent, help: "上一条回复", size: 24) {
+                IconButton(symbol: "chevron.left", accent: theme.accent, help: tr("上一条回复", "Previous Reply"), size: 24) {
                     shownReplyID = session.replies[max(0, index - 1)].id
                 }
                 .disabled(index == 0)
                 Text("\(index + 1)/\(session.replies.count)")
                     .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .foregroundStyle(.white.opacity(0.5))
-                IconButton(symbol: "chevron.right", accent: theme.accent, help: "下一条回复", size: 24) {
+                IconButton(symbol: "chevron.right", accent: theme.accent, help: tr("下一条回复", "Next Reply"), size: 24) {
                     shownReplyID = session.replies[min(session.replies.count - 1, index + 1)].id
                 }
                 .disabled(index == session.replies.count - 1)
             }
             IconButton(symbol: replyCollapsed ? "chevron.up" : "chevron.down", accent: theme.accent,
-                       help: replyCollapsed ? "展开回复" : "收起回复", size: 24) { replyCollapsed.toggle() }
+                       help: replyCollapsed ? tr("展开回复", "Show Reply") : tr("收起回复", "Hide Reply"), size: 24) { replyCollapsed.toggle() }
         }
     }
 }
@@ -323,7 +323,7 @@ private struct ListenButton: View {
                     }
                 } else {
                     Circle().fill(Color(red: 1, green: 0.38, blue: 0.40)).frame(width: 8, height: 8)
-                    Text(session.isStarting ? "启动中…" : "开始听")
+                    Text(session.isStarting ? tr("启动中…", "Starting…") : tr("开始听", "Listen"))
                 }
             }
             .font(.system(size: 12.5, weight: .semibold))
@@ -334,7 +334,7 @@ private struct ListenButton: View {
         }
         .buttonStyle(.plain)
         .disabled(session.isStarting)
-        .help(session.isRunning ? "停止（⌃⌥L）" : "开始听（⌃⌥L）")
+        .help(session.isRunning ? tr("停止（⌃⌥L）", "Stop (⌃⌥L)") : tr("开始听（⌃⌥L）", "Start Listening (⌃⌥L)"))
     }
 
     static func elapsed(from start: Date, to now: Date) -> String {
@@ -379,7 +379,7 @@ private struct SourceDot: View {
                 .shadow(color: color.opacity(on && level > 0.02 ? 0.95 : 0), radius: 4)
             Text(label).font(.system(size: 11.5, weight: .medium)).foregroundStyle(.white.opacity(on ? 0.8 : 0.35))
         }
-        .help(on ? "\(label)：在听（亮起来表示有声音）" : "\(label)：没开（会话与设置 → 模型与服务 → 声音来源）")
+        .help(on ? tr("\(label)：在听（亮起来表示有声音）", "\(label): listening (lit when there is sound)") : tr("\(label)：没开（会话与设置 → 模型与服务 → 声音来源）", "\(label): off (Session & Settings → Listening → Audio Sources)"))
     }
 }
 
@@ -494,7 +494,7 @@ private struct RowView: View {
         }
         .overlay(alignment: .topTrailing) {
             if hovered || selected {
-                PillButton(title: "回复", symbol: "arrowshape.turn.up.left.fill", prominent: true, theme: theme) {
+                PillButton(title: tr("回复", "Reply"), symbol: "arrowshape.turn.up.left.fill", prominent: true, theme: theme) {
                     session.reply(to: [row.id])
                 }
                 .scaleEffect(0.86)
@@ -518,13 +518,13 @@ private struct RowView: View {
                     .foregroundStyle(color)
             }
             .buttonStyle(.plain)
-            .help("点一下改名字，比如改成「我」")
+            .help(tr("点一下改名字，比如改成「我」", "Click to rename, e.g. to “Me”"))
             .popover(isPresented: $renaming) { renameField }
             Text(row.startedAt, format: .dateTime.hour(.twoDigits(amPM: .omitted)).minute().second())
                 .font(.system(size: 10.5).monospacedDigit())
                 .foregroundStyle(.white.opacity(0.32))
             if TextJoin.isQuestion(row.text) {
-                Text("提问")
+                Text(tr("提问", "Question"))
                     .font(.system(size: 9.5, weight: .bold))
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1.5)
@@ -536,13 +536,13 @@ private struct RowView: View {
 
     private var renameField: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("给「\(session.defaultSpeakerLabel(row))」起个名字").font(.caption)
-            TextField("比如：我、Alice", text: $newName)
+            Text(tr("给「\(session.defaultSpeakerLabel(row))」起个名字", "Name for “\(session.defaultSpeakerLabel(row))”")).font(.caption)
+            TextField(tr("比如：我、Alice", "e.g. Me, Alice"), text: $newName)
                 .frame(width: 180)
                 .onSubmit(commitRename)
             HStack {
                 Spacer()
-                Button("好", action: commitRename).keyboardShortcut(.defaultAction)
+                Button(tr("好", "OK"), action: commitRename).keyboardShortcut(.defaultAction)
             }
         }
         .padding(12)
@@ -621,7 +621,7 @@ private struct ReplyCard: View {
                     .background(Circle().fill(theme.accent.opacity(0.14)))
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text(reply.isScreenshot ? "截屏回复" : "回复建议").font(.system(size: 12.5, weight: .semibold))
+                Text(reply.isScreenshot ? tr("截屏回复", "Screenshot Reply") : tr("回复建议", "Suggested Reply")).font(.system(size: 12.5, weight: .semibold))
                 Text("\(reply.target) · \(reply.createdAt.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute()))")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.white.opacity(0.45))
@@ -629,9 +629,9 @@ private struct ReplyCard: View {
             Spacer(minLength: 0)
             if reply.isStreaming {
                 ProgressView().controlSize(.mini)
-                PillButton(title: "停止", theme: theme, action: session.stopReply)
+                PillButton(title: tr("停止", "Stop"), theme: theme, action: session.stopReply)
             } else if reply.isScreenshot, let copied = reply.copiedSection {
-                Label("已复制「\(copied)」· ⌘V 粘贴", systemImage: "checkmark.circle.fill")
+                Label(tr("已复制「\(copied)」· ⌘V 粘贴", "Copied “\(copied)” · ⌘V"), systemImage: "checkmark.circle.fill")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(theme.accent)
                     .lineLimit(1)
@@ -674,7 +674,7 @@ private struct ReplyCard: View {
                     .foregroundStyle(theme.accent)
                 Spacer()
                 Button { session.copy(section, of: reply.id) } label: {
-                    Label(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc")
+                    Label(copied ? tr("已复制", "Copied") : tr("复制", "Copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundStyle(copied ? theme.accent : .white.opacity(0.7))
                 }
@@ -696,14 +696,14 @@ private struct ReplyCard: View {
 
     private var regenerate: some View {
         HStack(spacing: 8) {
-            TextField("想怎么回？比如：婉拒、用中文、更正式", text: $instruction)
+            TextField(tr("想怎么回？比如：婉拒、用中文、更正式", "How to reply? e.g. decline, in English, more formal"), text: $instruction)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .padding(.horizontal, 10)
                 .frame(height: 28)
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.white.opacity(0.07)))
                 .onSubmit { session.regenerateScreenshotReply(reply.id, instruction: instruction) }
-            PillButton(title: "重新生成", symbol: "arrow.clockwise", theme: theme) {
+            PillButton(title: tr("重新生成", "Regenerate"), symbol: "arrow.clockwise", theme: theme) {
                 session.regenerateScreenshotReply(reply.id, instruction: instruction)
             }
         }
@@ -717,7 +717,7 @@ private struct AppearancePopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("外观").font(.system(size: 13, weight: .semibold))
+            Text(tr("外观", "Appearance")).font(.system(size: 13, weight: .semibold))
             HStack(spacing: 10) {
                 ForEach(ThemeID.allCases) { id in
                     let theme = OverlayTheme.of(id)
@@ -730,7 +730,7 @@ private struct AppearancePopover: View {
                                 .overlay(Circle().strokeBorder(theme.tint, lineWidth: 5).opacity(0.9))
                                 .overlay(Circle().strokeBorder(settings.value.theme == id ? Color.white : .clear, lineWidth: 2)
                                     .padding(-3))
-                            Text(id.label.components(separatedBy: "：").first ?? "").font(.system(size: 10.5))
+                            Text(id.label.components(separatedBy: CharacterSet(charactersIn: "：:")).first ?? "").font(.system(size: 10.5))
                         }
                     }
                     .buttonStyle(.plain)
@@ -738,7 +738,7 @@ private struct AppearancePopover: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Label("底色浓度", systemImage: "circle.lefthalf.filled").font(.system(size: 11.5))
+                    Label(tr("底色浓度", "Tint"), systemImage: "circle.lefthalf.filled").font(.system(size: 11.5))
                     Spacer()
                     Text("\(Int(settings.value.overlayOpacity * 100))%").font(.system(size: 11).monospacedDigit())
                         .foregroundStyle(.secondary)
@@ -747,14 +747,14 @@ private struct AppearancePopover: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Label("字号", systemImage: "textformat.size").font(.system(size: 11.5))
+                    Label(tr("字号", "Font Size"), systemImage: "textformat.size").font(.system(size: 11.5))
                     Spacer()
                     Text("\(Int(settings.value.fontSize))").font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
                 }
                 Slider(value: $settings.value.fontSize, in: 11...24, step: 1)
             }
             Toggle(isOn: $ui.clickThrough) {
-                Label("点击穿透（⌃⌥P）", systemImage: "cursorarrow.motionlines").font(.system(size: 11.5))
+                Label(tr("点击穿透（⌃⌥P）", "Click-Through (⌃⌥P)"), systemImage: "cursorarrow.motionlines").font(.system(size: 11.5))
             }
             .toggleStyle(.switch)
             .controlSize(.mini)

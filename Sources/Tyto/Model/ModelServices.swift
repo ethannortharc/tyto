@@ -25,6 +25,11 @@ struct Provider: Codable, Identifiable, Equatable, Sendable {
     var template: String
 
     var info: ProviderTemplate { ProviderTemplate.find(template) ?? ProviderTemplate.custom }
+
+    /// 界面里显示的名字：用户改过的原样显示；还是模板自带的名字（中文或英文版）就跟着界面语言走
+    var displayName: String {
+        ProviderTemplate.builtinNames[template]?.contains(name) == true ? info.name : name
+    }
     var needsKey: Bool { info.needsKey }
 
     var key: String? {
@@ -70,17 +75,25 @@ struct ProviderTemplate: Identifiable, Sendable {
 
     static func find(_ id: String) -> ProviderTemplate? { all.first { $0.id == id } }
 
-    static let custom = ProviderTemplate(
-        id: "custom", name: "自定义接口", kind: .openAICompatible, baseURL: "https://", symbol: "point.3.connected.trianglepath.dotted",
-        colors: [Color(red: 0.55, green: 0.58, blue: 0.65), Color(red: 0.35, green: 0.37, blue: 0.45)],
-        note: "任何 OpenAI 兼容的接口：公司内部网关、自建的 Whisper 服务……",
-        capabilities: [.chat, .vision, .transcription, .audioChat])
+    /// 名字随语言变的模板：中文名和英文名（其余的模板名字两种语言一样）
+    static let builtinNames: [String: [String]] = [
+        "custom": ["自定义接口", "Custom Endpoint"], "dashscope": ["通义千问", "Tongyi Qwen"],
+        "siliconflow": ["硅基流动", "SiliconFlow"], "ollama": ["Ollama 本机", "Ollama (Local)"],
+        "lmstudio": ["LM Studio 本机", "LM Studio (Local)"],
+    ]
 
-    static let all: [ProviderTemplate] = [
+    static var custom: ProviderTemplate { ProviderTemplate(
+        id: "custom", name: tr("自定义接口", "Custom Endpoint"), kind: .openAICompatible, baseURL: "https://", symbol: "point.3.connected.trianglepath.dotted",
+        colors: [Color(red: 0.55, green: 0.58, blue: 0.65), Color(red: 0.35, green: 0.37, blue: 0.45)],
+        note: tr("任何 OpenAI 兼容的接口：公司内部网关、自建的 Whisper 服务……", "Any OpenAI-compatible endpoint: a company gateway, a self-hosted Whisper service…"),
+        capabilities: [.chat, .vision, .transcription, .audioChat]) }
+
+    /// 名字和说明按当前界面语言取，所以是计算属性，不是 static let
+    static var all: [ProviderTemplate] { [
         ProviderTemplate(
             id: "anthropic", name: "Anthropic", kind: .anthropic, baseURL: "https://api.anthropic.com", symbol: "sparkle",
             colors: [Color(red: 0.86, green: 0.52, blue: 0.36), Color(red: 0.72, green: 0.38, blue: 0.24)],
-            note: "Claude 系列，回复和看图都强", capabilities: [.chat, .vision],
+            note: tr("Claude 系列，回复和看图都强", "Claude models; strong at replies and vision"), capabilities: [.chat, .vision],
             keyPage: "https://console.anthropic.com/settings/keys",
             suggested: [.chat: ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"],
                         .vision: ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]],
@@ -88,14 +101,14 @@ struct ProviderTemplate: Identifiable, Sendable {
         ProviderTemplate(
             id: "openai", name: "OpenAI", kind: .openAICompatible, baseURL: "https://api.openai.com/v1", symbol: "circle.hexagongrid.fill",
             colors: [Color(red: 0.25, green: 0.70, blue: 0.58), Color(red: 0.10, green: 0.50, blue: 0.42)],
-            note: "GPT 系列；语音转写 gpt-4o-transcribe、whisper-1", capabilities: [.chat, .vision, .transcription, .audioChat],
+            note: tr("GPT 系列；语音转写 gpt-4o-transcribe、whisper-1", "GPT models; transcription with gpt-4o-transcribe, whisper-1"), capabilities: [.chat, .vision, .transcription, .audioChat],
             keyPage: "https://platform.openai.com/api-keys",
             suggested: [.transcription: ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"]],
             legacyKeyAccount: "openai-compatible"),
         ProviderTemplate(
             id: "openrouter", name: "OpenRouter", kind: .openAICompatible, baseURL: "https://openrouter.ai/api/v1", symbol: "arrow.triangle.branch",
             colors: [Color(red: 0.42, green: 0.45, blue: 0.95), Color(red: 0.28, green: 0.25, blue: 0.80)],
-            note: "一个 key 用几百个模型；能听音频的模型（如 Gemini）也可以拿来做语音识别",
+            note: tr("一个 key 用几百个模型；能听音频的模型（如 Gemini）也可以拿来做语音识别", "One key for hundreds of models; audio-capable models (e.g. Gemini) can also do speech recognition"),
             capabilities: [.chat, .vision, .audioChat], keyPage: "https://openrouter.ai/keys",
             // 2026-10 在 OpenRouter 上实测可用
             suggested: [.chat: ["anthropic/claude-opus-5.5", "anthropic/claude-sonnet-5.5", "anthropic/claude-haiku-5.5"],
@@ -105,53 +118,53 @@ struct ProviderTemplate: Identifiable, Sendable {
             id: "gemini", name: "Google Gemini", kind: .openAICompatible,
             baseURL: "https://generativelanguage.googleapis.com/v1beta/openai", symbol: "diamond.fill",
             colors: [Color(red: 0.36, green: 0.58, blue: 1.0), Color(red: 0.55, green: 0.40, blue: 0.95)],
-            note: "看图、听音频都强，Flash 很便宜", capabilities: [.chat, .vision, .audioChat],
+            note: tr("看图、听音频都强，Flash 很便宜", "Strong at vision and audio; Flash is very cheap"), capabilities: [.chat, .vision, .audioChat],
             keyPage: "https://aistudio.google.com/apikey",
             suggested: [.audioChat: ["gemini-2.5-flash"], .vision: ["gemini-2.5-flash"]]),
         ProviderTemplate(
             id: "deepseek", name: "DeepSeek", kind: .openAICompatible, baseURL: "https://api.deepseek.com/v1", symbol: "fish.fill",
             colors: [Color(red: 0.30, green: 0.50, blue: 0.98), Color(red: 0.18, green: 0.32, blue: 0.85)],
-            note: "便宜，中文好；不能看图", capabilities: [.chat], keyPage: "https://platform.deepseek.com/api_keys",
+            note: tr("便宜，中文好；不能看图", "Cheap and good at Chinese; no vision"), capabilities: [.chat], keyPage: "https://platform.deepseek.com/api_keys",
             suggested: [.chat: ["deepseek-chat"]]),
         ProviderTemplate(
-            id: "dashscope", name: "通义千问", kind: .openAICompatible,
+            id: "dashscope", name: tr("通义千问", "Tongyi Qwen"), kind: .openAICompatible,
             baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", symbol: "cloud.fill",
             colors: [Color(red: 0.45, green: 0.38, blue: 0.95), Color(red: 0.30, green: 0.22, blue: 0.80)],
-            note: "阿里云百炼；Qwen-VL 看图、中文识字强", capabilities: [.chat, .vision],
+            note: tr("阿里云百炼；Qwen-VL 看图、中文识字强", "Alibaba Cloud Bailian; Qwen-VL is strong at vision and Chinese text"), capabilities: [.chat, .vision],
             keyPage: "https://bailian.console.aliyun.com/", suggested: [.vision: ["qwen-vl-max", "qwen-vl-plus"]]),
         ProviderTemplate(
-            id: "siliconflow", name: "硅基流动", kind: .openAICompatible, baseURL: "https://api.siliconflow.cn/v1",
+            id: "siliconflow", name: tr("硅基流动", "SiliconFlow"), kind: .openAICompatible, baseURL: "https://api.siliconflow.cn/v1",
             symbol: "bolt.horizontal.fill",
             colors: [Color(red: 0.55, green: 0.35, blue: 0.95), Color(red: 0.38, green: 0.20, blue: 0.80)],
-            note: "国内访问快，很多开源模型；语音转写 SenseVoice", capabilities: [.chat, .vision, .transcription],
+            note: tr("国内访问快，很多开源模型；语音转写 SenseVoice", "Fast in China, many open-source models; transcription with SenseVoice"), capabilities: [.chat, .vision, .transcription],
             keyPage: "https://cloud.siliconflow.cn/account/ak",
             suggested: [.transcription: ["FunAudioLLM/SenseVoiceSmall"]]),
         ProviderTemplate(
             id: "groq", name: "Groq", kind: .openAICompatible, baseURL: "https://api.groq.com/openai/v1", symbol: "hare.fill",
             colors: [Color(red: 0.95, green: 0.42, blue: 0.30), Color(red: 0.80, green: 0.25, blue: 0.20)],
-            note: "极快；Whisper 语音转写便宜", capabilities: [.chat, .transcription], keyPage: "https://console.groq.com/keys",
+            note: tr("极快；Whisper 语音转写便宜", "Very fast; cheap Whisper transcription"), capabilities: [.chat, .transcription], keyPage: "https://console.groq.com/keys",
             suggested: [.transcription: ["whisper-large-v3-turbo", "whisper-large-v3"]]),
         ProviderTemplate(
-            id: "ollama", name: "Ollama 本机", kind: .ollama, baseURL: "http://127.0.0.1:11434/v1", symbol: "desktopcomputer",
+            id: "ollama", name: tr("Ollama 本机", "Ollama (Local)"), kind: .ollama, baseURL: "http://127.0.0.1:11434/v1", symbol: "desktopcomputer",
             colors: [Color(red: 0.30, green: 0.30, blue: 0.34), Color(red: 0.10, green: 0.10, blue: 0.12)],
-            note: "在这台 Mac 上跑开源模型，数据不出本机", capabilities: [.chat, .vision], needsKey: false,
+            note: tr("在这台 Mac 上跑开源模型，数据不出本机", "Runs open-source models on this Mac; data stays on-device"), capabilities: [.chat, .vision], needsKey: false,
             suggested: [.vision: Ollama.recommended.map(\.id)]),
         ProviderTemplate(
-            id: "lmstudio", name: "LM Studio 本机", kind: .openAICompatible, baseURL: "http://127.0.0.1:1234/v1", symbol: "laptopcomputer",
+            id: "lmstudio", name: tr("LM Studio 本机", "LM Studio (Local)"), kind: .openAICompatible, baseURL: "http://127.0.0.1:1234/v1", symbol: "laptopcomputer",
             colors: [Color(red: 0.40, green: 0.42, blue: 0.95), Color(red: 0.20, green: 0.22, blue: 0.70)],
-            note: "本机跑 MLX 模型（Apple 芯片上快）", capabilities: [.chat, .vision], needsKey: false),
+            note: tr("本机跑 MLX 模型（Apple 芯片上快）", "Runs MLX models locally (fast on Apple silicon)"), capabilities: [.chat, .vision], needsKey: false),
         ProviderTemplate(
             id: "soniox", name: "Soniox", kind: .soniox, baseURL: "wss://stt-rt.soniox.com/transcribe-websocket", symbol: "waveform.badge.mic",
             colors: [Color(red: 1.0, green: 0.62, blue: 0.30), Color(red: 0.92, green: 0.40, blue: 0.18)],
-            note: "实时语音识别，分得出说话人，60 多种语言，约 $0.12/小时", capabilities: [.streamingSpeech],
+            note: tr("实时语音识别，分得出说话人，60 多种语言，约 $0.12/小时", "Real-time speech recognition with speaker labels, 60+ languages, about $0.12/hour"), capabilities: [.streamingSpeech],
             keyPage: "https://console.soniox.com/", suggested: [.streamingSpeech: ["stt-rt-v5"]], legacyKeyAccount: "soniox"),
         ProviderTemplate(
             id: "deepgram", name: "Deepgram", kind: .deepgram, baseURL: "wss://api.deepgram.com/v1/listen", symbol: "waveform.path",
             colors: [Color(red: 0.20, green: 0.85, blue: 0.70), Color(red: 0.08, green: 0.60, blue: 0.55)],
-            note: "实时语音识别，延迟低，分得出说话人；中文用 nova-2", capabilities: [.streamingSpeech],
+            note: tr("实时语音识别，延迟低，分得出说话人；中文用 nova-2", "Real-time speech recognition, low latency, speaker labels; use nova-2 for Chinese"), capabilities: [.streamingSpeech],
             keyPage: "https://console.deepgram.com/", suggested: [.streamingSpeech: ["nova-3", "nova-2"]]),
         custom,
-    ]
+    ] }
 }
 
 /// 某个用途用哪个服务商的哪个模型
@@ -175,18 +188,18 @@ enum SpeechMethod: String, Codable, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .apple: "Apple 本机"
-        case .streaming: "实时识别服务"
-        case .transcription: "语音转写接口"
-        case .audioModel: "让模型听写"
+        case .apple: tr("Apple 本机", "Apple On-Device")
+        case .streaming: tr("实时识别服务", "Real-Time Service")
+        case .transcription: tr("语音转写接口", "Transcription API")
+        case .audioModel: tr("让模型听写", "Audio Model")
         }
     }
     var detail: String {
         switch self {
-        case .apple: "免费、不联网。一路只认一种语言，不区分说话人。"
-        case .streaming: "Soniox、Deepgram：边说边出字，分得出说话人，最适合开会。"
-        case .transcription: "OpenAI、Groq、硅基流动或自建 Whisper：说完一句传一句，比实时慢一两秒。"
-        case .audioModel: "OpenRouter、Gemini 等能听音频的模型：说完一句传一句，多语言混说也行。"
+        case .apple: tr("免费、不联网。一路只认一种语言，不区分说话人。", "Free and offline. One language per channel; no speaker labels.")
+        case .streaming: tr("Soniox、Deepgram：边说边出字，分得出说话人，最适合开会。", "Soniox, Deepgram: text appears as people speak, with speaker labels. Best for meetings.")
+        case .transcription: tr("OpenAI、Groq、硅基流动或自建 Whisper：说完一句传一句，比实时慢一两秒。", "OpenAI, Groq, SiliconFlow or a self-hosted Whisper: each sentence is uploaded after it ends, so it runs a second or two behind real time.")
+        case .audioModel: tr("OpenRouter、Gemini 等能听音频的模型：说完一句传一句，多语言混说也行。", "Audio-capable models such as OpenRouter or Gemini: each sentence is uploaded after it ends; mixed languages are fine.")
         }
     }
     var symbol: String {
@@ -216,8 +229,10 @@ struct ResolvedModel: Sendable {
 }
 
 extension AppSettings {
-    static let defaultProviders: [Provider] = ["anthropic", "ollama"].compactMap { id in
-        ProviderTemplate.find(id).map { Provider(id: $0.id, name: $0.name, kind: $0.kind, baseURL: $0.baseURL, template: $0.id) }
+    static var defaultProviders: [Provider] {
+        ["anthropic", "ollama"].compactMap { id in
+            ProviderTemplate.find(id).map { Provider(id: $0.id, name: $0.name, kind: $0.kind, baseURL: $0.baseURL, template: $0.id) }
+        }
     }
 
     func provider(_ id: String) -> Provider? { providers.first { $0.id == id } }
@@ -225,10 +240,10 @@ extension AppSettings {
     /// 找出某个用途的服务商和模型；没选或服务商被删了就报一句看得懂的错
     func resolve(_ slot: ModelSlot, for use: String) throws -> ResolvedModel {
         guard let provider = provider(slot.providerID) else {
-            throw TytoError.server("\(use)还没选服务商（会话与设置 → 模型与服务）")
+            throw TytoError.server(tr("\(use)还没选服务商（会话与设置 → 模型与服务）", "No provider selected for \(use) (Session & Settings → Models & Services)"))
         }
         guard !slot.model.trimmingCharacters(in: .whitespaces).isEmpty else {
-            throw TytoError.server("\(use)还没选模型（会话与设置 → 模型与服务）")
+            throw TytoError.server(tr("\(use)还没选模型（会话与设置 → 模型与服务）", "No model selected for \(use) (Session & Settings → Models & Services)"))
         }
         if provider.needsKey, provider.key == nil { throw TytoError.missingAPIKey(provider.name) }
         return ResolvedModel(provider: provider, model: slot.model.trimmingCharacters(in: .whitespaces), effort: slot.effort)

@@ -7,8 +7,8 @@ enum Channel: String, Codable, CaseIterable, Sendable {
 
     var label: String {
         switch self {
-        case .remote: "远端"
-        case .local: "本地"
+        case .remote: tr("远端", "Remote")
+        case .local: tr("本地", "Local")
         }
     }
 }

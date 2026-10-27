@@ -27,7 +27,7 @@ final class SystemAudioCapture: AudioSource, @unchecked Sendable {
         description.isPrivate = true
         description.muteBehavior = .unmuted
         guard let tap = try system.makeProcessTap(description: description) else {
-            throw TytoError.tapFailed("建不了音频捕获")
+            throw TytoError.tapFailed(tr("建不了音频捕获", "Couldn't create the audio capture"))
         }
         self.tap = tap
 
@@ -44,7 +44,7 @@ final class SystemAudioCapture: AudioSource, @unchecked Sendable {
             kAudioAggregateDeviceTapListKey: [[kAudioSubTapDriftCompensationKey: true, kAudioSubTapUIDKey: try tap.uid]],
         ]
         guard let aggregate = try system.makeAggregateDevice(description: aggregateDescription) else {
-            throw TytoError.tapFailed("建不了聚合设备")
+            throw TytoError.tapFailed(tr("建不了聚合设备", "Couldn't create the aggregate device"))
         }
         self.aggregate = aggregate
 
@@ -64,7 +64,7 @@ final class SystemAudioCapture: AudioSource, @unchecked Sendable {
             let samples = resampler.process(mono)
             if !samples.isEmpty { self.onSamples?(samples) }
         }
-        guard status == noErr, let procID else { throw TytoError.tapFailed("注册不了音频回调（\(status)）") }
+        guard status == noErr, let procID else { throw TytoError.tapFailed(tr("注册不了音频回调（\(status)）", "Couldn't register the audio callback (\(status))")) }
         self.procID = procID
         try aggregate.start(IOProcID: procID)
     }

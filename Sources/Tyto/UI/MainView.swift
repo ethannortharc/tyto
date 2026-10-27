@@ -69,29 +69,29 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .session: "会话"
-        case .skills: "技能"
-        case .listen: "听写"
-        case .translation: "翻译"
-        case .screenshot: "截屏回复"
-        case .services: "模型与服务"
-        case .appearance: "外观"
-        case .shortcuts: "快捷键"
-        case .permissions: "权限与关于"
+        case .session: tr("会话", "Session")
+        case .skills: tr("技能", "Skills")
+        case .listen: tr("听写", "Listening")
+        case .translation: tr("翻译", "Translation")
+        case .screenshot: tr("截屏回复", "Screenshot Reply")
+        case .services: tr("模型与服务", "Models & Services")
+        case .appearance: tr("外观", "Appearance")
+        case .shortcuts: tr("快捷键", "Shortcuts")
+        case .permissions: tr("权限与关于", "Permissions & About")
         }
     }
 
     var subtitle: String {
         switch self {
-        case .session: "这场会议的背景、关键词、技能和说话人。回复时都会带上。"
-        case .skills: "写给大模型的做法说明，决定回复的语气和套路。"
-        case .listen: "听哪些声音，怎么把声音变成文字。"
-        case .translation: "每句话下面显示译文，悬浮窗顶部一键开关。"
-        case .screenshot: "截下最前面的 App 或整个屏幕，读懂内容，写好能直接粘贴的回复。"
-        case .services: "服务商只配一次，回复、看图、翻译、语音识别都从这里选。"
-        case .appearance: "主题、透明度和字号。下面是实时预览。"
-        case .shortcuts: "会议软件在前台时也能用。"
-        case .permissions: "Tyto 用到的系统权限，以及数据放在哪。"
+        case .session: tr("这场会议的背景、关键词、技能和说话人。回复时都会带上。", "Context, keywords, skills and speakers for this meeting. All of it goes into replies.")
+        case .skills: tr("写给大模型的做法说明，决定回复的语气和套路。", "Instructions for the model that set the tone and approach of replies.")
+        case .listen: tr("听哪些声音，怎么把声音变成文字。", "Which sounds to listen to, and how to turn them into text.")
+        case .translation: tr("每句话下面显示译文，悬浮窗顶部一键开关。", "Shows a translation under each line. One-click toggle at the top of the overlay.")
+        case .screenshot: tr("截下最前面的 App 或整个屏幕，读懂内容，写好能直接粘贴的回复。", "Capture the frontmost app or the whole screen, read it, and write a reply you can paste right away.")
+        case .services: tr("服务商只配一次，回复、看图、翻译、语音识别都从这里选。", "Set up each provider once; Reply, Vision, Translation and Speech Recognition all pick from here.")
+        case .appearance: tr("主题、透明度和字号。下面是实时预览。", "Theme, tint and font size. Live preview below.")
+        case .shortcuts: tr("会议软件在前台时也能用。", "Works while the meeting app is in front.")
+        case .permissions: tr("Tyto 用到的系统权限，以及数据放在哪。", "System permissions Tyto uses, and where your data is stored.")
         }
     }
 
@@ -123,11 +123,11 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    static let groups: [(title: String, pages: [SettingsPage])] = [
-        ("会议", [.session, .skills]),
-        ("功能", [.listen, .translation, .screenshot]),
-        ("设置", [.services, .appearance, .shortcuts, .permissions]),
-    ]
+    static var groups: [(title: String, pages: [SettingsPage])] { [
+        (tr("会议", "Meeting"), [.session, .skills]),
+        (tr("功能", "Features"), [.listen, .translation, .screenshot]),
+        (tr("设置", "Settings"), [.services, .appearance, .shortcuts, .permissions]),
+    ] }
 }
 
 // MARK: - 通用部件
@@ -272,11 +272,11 @@ private struct SessionPage: View {
     var body: some View {
         Form {
             Section {
-                Row(symbol: "textformat", tint: .blue, title: "会议名称") {
-                    TextField("", text: $session.title, prompt: Text("新会议")).frame(maxWidth: 280)
+                Row(symbol: "textformat", tint: .blue, title: tr("会议名称", "Meeting Name")) {
+                    TextField("", text: $session.title, prompt: Text(tr("新会议", "New Meeting"))).frame(maxWidth: 280)
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    Label { Text("背景") } icon: {
+                    Label { Text(tr("背景", "Context")) } icon: {
                         Image(systemName: "doc.text").foregroundStyle(.blue)
                     }
                     TextEditor(text: $session.context)
@@ -287,7 +287,7 @@ private struct SessionPage: View {
                         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.04)))
                         .overlay(alignment: .topLeading) {
                             if session.context.isEmpty {
-                                Text("会议目的和议程；参会的人、他们的角色和关心的事；我的角色和立场；要用到的术语、数字、日期。")
+                                Text(tr("会议目的和议程；参会的人、他们的角色和关心的事；我的角色和立场；要用到的术语、数字、日期。", "Meeting purpose and agenda; who is attending, their roles and concerns; my role and position; terms, numbers and dates to use."))
                                     .font(.system(size: 13))
                                     .foregroundStyle(.tertiary)
                                     .padding(13)
@@ -295,11 +295,11 @@ private struct SessionPage: View {
                             }
                         }
                 }
-                Row(symbol: "highlighter", tint: .pink, title: "关键词", detail: "字幕里高亮，逗号分隔。数字、日期、人名会自动高亮。") {
-                    TextField("", text: $session.keywords, prompt: Text("launch, budget, 上线")).frame(maxWidth: 280)
+                Row(symbol: "highlighter", tint: .pink, title: tr("关键词", "Keywords"), detail: tr("字幕里高亮，逗号分隔。数字、日期、人名会自动高亮。", "Highlighted in captions, comma-separated. Numbers, dates and names are highlighted automatically.")) {
+                    TextField("", text: $session.keywords, prompt: Text(tr("launch, budget, 上线", "launch, budget, deadline"))).frame(maxWidth: 280)
                 }
             } header: {
-                Text("这场会议")
+                Text(tr("这场会议", "This Meeting"))
             }
 
             Section {
@@ -322,15 +322,15 @@ private struct SessionPage: View {
                 }
             } header: {
                 HStack {
-                    Text("用到的技能")
+                    Text(tr("用到的技能", "Skills in Use"))
                     Spacer()
-                    Button("编辑技能") { page = .skills }.buttonStyle(.link).font(.caption)
+                    Button(tr("编辑技能", "Edit Skills")) { page = .skills }.buttonStyle(.link).font(.caption)
                 }
             }
 
             Section {
                 if session.knownSpeakers.isEmpty {
-                    Label("开始听以后，出现的说话人会列在这里", systemImage: "person.crop.circle.badge.questionmark")
+                    Label(tr("开始听以后，出现的说话人会列在这里", "Speakers will be listed here once listening starts"), systemImage: "person.crop.circle.badge.questionmark")
                         .foregroundStyle(.secondary)
                 }
                 ForEach(session.knownSpeakers, id: \.key) { speaker in
@@ -339,12 +339,12 @@ private struct SessionPage: View {
                         TextField("", text: Binding(
                             get: { session.speakerNames[speaker.key] ?? "" },
                             set: { session.rename(speaker.key, to: $0) }),
-                                  prompt: Text("名字，比如：我、Alice"))
+                                  prompt: Text(tr("名字，比如：我、Alice", "Name, e.g. Me, Alice")))
                             .frame(maxWidth: 220)
                     }
                 }
             } header: {
-                Text("说话人")
+                Text(tr("说话人", "Speakers"))
             }
 
             Section {
@@ -352,21 +352,21 @@ private struct SessionPage: View {
                     Button {
                         session.toggle()
                     } label: {
-                        Label(session.isRunning ? "停止听" : "开始听",
+                        Label(session.isRunning ? tr("停止听", "Stop Listening") : tr("开始听", "Start Listening"),
                               systemImage: session.isRunning ? "stop.circle.fill" : "record.circle")
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(session.isStarting)
-                    Button(action: export) { Label("导出记录", systemImage: "square.and.arrow.up") }
+                    Button(action: export) { Label(tr("导出记录", "Export Transcript"), systemImage: "square.and.arrow.up") }
                         .disabled(session.rows.isEmpty)
                     Spacer()
                     Button { Task { await session.newSession() } } label: {
-                        Label("开始新会议", systemImage: "plus.bubble")
+                        Label(tr("开始新会议", "New Meeting"), systemImage: "plus.bubble")
                     }
-                    .help("当前记录存档后清空；背景、关键词和技能保留")
+                    .help(tr("当前记录存档后清空；背景、关键词和技能保留", "Archives the current transcript and clears it; context, keywords and skills are kept"))
                 }
             } footer: {
-                Text("记录自动保存在 ~/Library/Application Support/Tyto/sessions/").font(.caption).foregroundStyle(.secondary)
+                Text(tr("记录自动保存在 ~/Library/Application Support/Tyto/sessions/", "Transcripts are saved automatically in ~/Library/Application Support/Tyto/sessions/")).font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -399,7 +399,7 @@ private struct SkillsPage: View {
                 Divider()
                 HStack(spacing: 4) {
                     Button { selectedID = skills.create().id } label: { Image(systemName: "plus") }
-                        .help("新建技能")
+                        .help(tr("新建技能", "New Skill"))
                     Button {
                         if let draft {
                             skills.delete(draft)
@@ -407,9 +407,9 @@ private struct SkillsPage: View {
                         }
                     } label: { Image(systemName: "minus") }
                         .disabled(draft == nil)
-                        .help("删除")
+                        .help(tr("删除", "Delete"))
                     Spacer()
-                    Button(action: skills.openFolder) { Image(systemName: "folder") }.help("在 Finder 中打开技能文件夹")
+                    Button(action: skills.openFolder) { Image(systemName: "folder") }.help(tr("在 Finder 中打开技能文件夹", "Open Skills Folder in Finder"))
                 }
                 .buttonStyle(.borderless)
                 .padding(8)
@@ -418,14 +418,14 @@ private struct SkillsPage: View {
             Divider()
             if let binding = Binding($draft) {
                 Form {
-                    Row(symbol: "textformat", tint: .purple, title: "名称") {
+                    Row(symbol: "textformat", tint: .purple, title: tr("名称", "Name")) {
                         TextField("", text: binding.name).frame(maxWidth: 260)
                     }
-                    Row(symbol: "questionmark.bubble", tint: .purple, title: "什么时候用") {
+                    Row(symbol: "questionmark.bubble", tint: .purple, title: tr("什么时候用", "When to Use")) {
                         TextField("", text: binding.description).frame(maxWidth: 260)
                     }
                     VStack(alignment: .leading, spacing: 8) {
-                        Label { Text("做法说明（Markdown，原样交给大模型）") } icon: {
+                        Label { Text(tr("做法说明（Markdown，原样交给大模型）", "Instructions (Markdown, passed to the model as-is)")) } icon: {
                             Image(systemName: "text.alignleft").foregroundStyle(.purple)
                         }
                         TextEditor(text: binding.body)
@@ -437,7 +437,7 @@ private struct SkillsPage: View {
                     }
                     HStack {
                         Spacer()
-                        Button { if let draft { skills.save(draft) } } label: { Label("保存", systemImage: "checkmark") }
+                        Button { if let draft { skills.save(draft) } } label: { Label(tr("保存", "Save"), systemImage: "checkmark") }
                             .buttonStyle(.borderedProminent)
                             .keyboardShortcut("s", modifiers: .command)
                             .disabled(draft == skills.skills.first { $0.id == draft?.id })
@@ -445,8 +445,8 @@ private struct SkillsPage: View {
                 }
                 .formStyle(.grouped)
             } else {
-                ContentUnavailableView("选一个技能", systemImage: "wand.and.sparkles",
-                                       description: Text("左边选一个编辑，或者点 + 新建"))
+                ContentUnavailableView(tr("选一个技能", "Select a Skill"), systemImage: "wand.and.sparkles",
+                                       description: Text(tr("左边选一个编辑，或者点 + 新建", "Pick one on the left to edit, or click + to create one")))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -463,41 +463,41 @@ private struct ListenPage: View {
     var body: some View {
         Form {
             Section {
-                Row(symbol: "person.wave.2.fill", tint: .blue, title: "远端", detail: "会议软件里对方的声音（录系统声音）") {
+                Row(symbol: "person.wave.2.fill", tint: .blue, title: tr("远端", "Remote"), detail: tr("会议软件里对方的声音（录系统声音）", "The other side's audio from the meeting app (system audio)")) {
                     Toggle("", isOn: $settings.value.captureRemote).labelsHidden()
                 }
-                Row(symbol: "mic.fill", tint: .green, title: "本地", detail: "麦克风收到的声音：你和会议室里的人") {
+                Row(symbol: "mic.fill", tint: .green, title: tr("本地", "Local"), detail: tr("麦克风收到的声音：你和会议室里的人", "Sound from the microphone: you and people in the room")) {
                     Toggle("", isOn: $settings.value.captureLocal).labelsHidden()
                 }
-                Row(symbol: "mic.badge.plus", tint: .green, title: "麦克风", detail: "自动：跟系统默认走，跳过 BlackHole 这类虚拟声卡") {
+                Row(symbol: "mic.badge.plus", tint: .green, title: tr("麦克风", "Microphone"), detail: tr("自动：跟系统默认走，跳过 BlackHole 这类虚拟声卡", "Auto: follows the system default, skipping virtual devices like BlackHole")) {
                     Picker("", selection: $settings.value.localInputDeviceUID) {
-                        Text("自动").tag("")
+                        Text(tr("自动", "Auto")).tag("")
                         ForEach(inputDevices) { device in
-                            Text(device.isVirtual ? "\(device.name)（虚拟声卡）" : device.name).tag(device.uid)
+                            Text(device.isVirtual ? tr("\(device.name)（虚拟声卡）", "\(device.name) (virtual)") : device.name).tag(device.uid)
                         }
                     }
                     .labelsHidden()
                     .frame(maxWidth: 240)
                 }
-                Row(symbol: "ear.and.waveform", tint: .orange, title: "去掉回声", detail: "外放开会时，麦克风收到的对方声音不重复显示") {
+                Row(symbol: "ear.and.waveform", tint: .orange, title: tr("去掉回声", "Remove Echo"), detail: tr("外放开会时，麦克风收到的对方声音不重复显示", "With speakers on, the other side's voice picked up by the mic isn't shown twice")) {
                     Toggle("", isOn: $settings.value.echoCancellation).labelsHidden()
                 }
             } header: {
-                Text("听哪些声音")
+                Text(tr("听哪些声音", "Audio Sources"))
             }
 
             Section {
                 SpeechMethodCards(settings: settings)
             } header: {
-                Text("怎么把声音变成文字")
+                Text(tr("怎么把声音变成文字", "How Audio Becomes Text"))
             }
 
             Section {
                 SpeechDetails(settings: settings)
             } header: {
-                Text(settings.value.speechMethod == .apple ? "语言" : "服务")
+                Text(settings.value.speechMethod == .apple ? tr("语言", "Language") : tr("服务", "Service"))
             } footer: {
-                Text("改了以后停止再开始听才生效。").font(.caption).foregroundStyle(.secondary)
+                Text(tr("改了以后停止再开始听才生效。", "Changes take effect the next time you start listening.")).font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -535,17 +535,17 @@ private struct SpeechDetails: View {
 
     var body: some View {
         if let capability = settings.value.speechMethod.capability {
-            Row(symbol: "server.rack", tint: .indigo, title: "服务商和模型") {
+            Row(symbol: "server.rack", tint: .indigo, title: tr("服务商和模型", "Provider & Model")) {
                 ModelPicker(settings: settings, slot: $settings.value.speechSlot, capability: capability)
             }
-            Row(symbol: "globe", tint: .blue, title: "可能出现的语言", detail: "逗号分隔，如 en,zh；只填一种识别更准") {
+            Row(symbol: "globe", tint: .blue, title: tr("可能出现的语言", "Expected Languages"), detail: tr("逗号分隔，如 en,zh；只填一种识别更准", "Comma-separated, e.g. en,zh; a single language is more accurate")) {
                 TextField("", text: $settings.value.speechLanguageHints).frame(maxWidth: 200)
             }
         } else {
-            Row(symbol: "person.wave.2.fill", tint: .blue, title: "远端说的语言") {
+            Row(symbol: "person.wave.2.fill", tint: .blue, title: tr("远端说的语言", "Remote Language")) {
                 LanguageField(code: $settings.value.remoteLocale, choices: Languages.speechChoices)
             }
-            Row(symbol: "mic.fill", tint: .green, title: "本地说的语言") {
+            Row(symbol: "mic.fill", tint: .green, title: tr("本地说的语言", "Local Language")) {
                 LanguageField(code: $settings.value.localLocale, choices: Languages.speechChoices)
             }
         }
@@ -567,40 +567,40 @@ private struct ServicesPage: View {
                                 remove: { remove(provider.id) })
                 }
                 if settings.value.providers.isEmpty {
-                    Label("还没有服务商，点右上角「添加」", systemImage: "tray").foregroundStyle(.secondary)
+                    Label(tr("还没有服务商，点右上角「添加」", "No providers yet. Click Add at top right."), systemImage: "tray").foregroundStyle(.secondary)
                 }
             } header: {
                 HStack {
-                    Text("服务商")
+                    Text(tr("服务商", "Providers"))
                     Spacer()
                     AddProviderMenu { add($0) }
                 }
             } footer: {
-                Text("每个服务商只要配一次（地址、key），下面各个用途从里面选。key 存在钥匙串里。").font(.caption).foregroundStyle(.secondary)
+                Text(tr("每个服务商只要配一次（地址、key），下面各个用途从里面选。key 存在钥匙串里。", "Set up each provider once (address, key); the uses below pick from them. Keys are stored in the Keychain.")).font(.caption).foregroundStyle(.secondary)
             }
 
             Section {
-                Row(symbol: "text.bubble.fill", tint: .blue, title: "回复", detail: "会议回复、截屏回复") {
+                Row(symbol: "text.bubble.fill", tint: .blue, title: tr("回复", "Reply"), detail: tr("会议回复、截屏回复", "Meeting replies and screenshot replies")) {
                     VStack(alignment: .trailing, spacing: 6) {
                         ModelPicker(settings: settings, slot: $settings.value.replySlot, capability: .chat)
                         Picker("", selection: $settings.value.replySlot.effort) {
-                            Text("思考：低").tag("low")
-                            Text("中").tag("medium")
-                            Text("高").tag("high")
-                            Text("不传").tag("")
+                            Text(tr("思考：低", "Effort: Low")).tag("low")
+                            Text(tr("中", "Medium")).tag("medium")
+                            Text(tr("高", "High")).tag("high")
+                            Text(tr("不传", "Default")).tag("")
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
                         .frame(maxWidth: 300)
                     }
                 }
-                Row(symbol: "eye.fill", tint: .teal, title: "看图", detail: "截屏回复选「先用看图模型读图」时用") {
+                Row(symbol: "eye.fill", tint: .teal, title: tr("看图", "Vision"), detail: tr("截屏回复选「先用看图模型读图」时用", "Used when Screenshot Reply is set to “Vision Model First”")) {
                     ModelPicker(settings: settings, slot: $settings.value.visionSlot, capability: .vision)
                 }
-                Row(symbol: "character.bubble.fill", tint: .green, title: "翻译", detail: "翻译方式选「大模型翻译」时用") {
+                Row(symbol: "character.bubble.fill", tint: .green, title: tr("翻译", "Translation"), detail: tr("翻译方式选「大模型翻译」时用", "Used when the translation method is “LLM Translation”")) {
                     ModelPicker(settings: settings, slot: $settings.value.translationSlot, capability: .chat, sameAsReply: true)
                 }
-                Row(symbol: "waveform", tint: .pink, title: "语音识别", detail: settings.value.speechMethod.title) {
+                Row(symbol: "waveform", tint: .pink, title: tr("语音识别", "Speech Recognition"), detail: settings.value.speechMethod.title) {
                     VStack(alignment: .trailing, spacing: 6) {
                         Picker("", selection: $settings.value.speechMethod) {
                             ForEach(SpeechMethod.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
@@ -613,9 +613,9 @@ private struct ServicesPage: View {
                     }
                 }
             } header: {
-                Text("各个用途")
+                Text(tr("各个用途", "Uses"))
             } footer: {
-                Text("每一行左边选服务商，右边选模型；点 ⌄ 从服务商读模型列表，也可以直接输入。").font(.caption).foregroundStyle(.secondary)
+                Text(tr("每一行左边选服务商，右边选模型；点 ⌄ 从服务商读模型列表，也可以直接输入。", "Pick a provider on the left and a model on the right; click ⌄ to load the provider's model list, or type one in.")).font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -646,14 +646,14 @@ private struct AddProviderMenu: View {
 
     var body: some View {
         Menu {
-            Section("大模型") {
+            Section(tr("大模型", "Language Models")) {
                 ForEach(["anthropic", "openai", "openrouter", "gemini", "deepseek", "dashscope", "siliconflow", "groq"], id: \.self) { item($0) }
             }
-            Section("本机") { ForEach(["ollama", "lmstudio"], id: \.self) { item($0) } }
-            Section("语音识别") { ForEach(["soniox", "deepgram"], id: \.self) { item($0) } }
+            Section(tr("本机", "Local")) { ForEach(["ollama", "lmstudio"], id: \.self) { item($0) } }
+            Section(tr("语音识别", "Speech Recognition")) { ForEach(["soniox", "deepgram"], id: \.self) { item($0) } }
             Section { item("custom") }
         } label: {
-            Label("添加", systemImage: "plus.circle.fill")
+            Label(tr("添加", "Add"), systemImage: "plus.circle.fill")
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -684,16 +684,16 @@ private struct ProviderRow: View {
                 HStack(spacing: 12) {
                     IconTile(symbol: provider.info.symbol, colors: provider.info.colors, size: 30)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(provider.name).font(.system(size: 13, weight: .semibold))
+                        Text(provider.displayName).font(.system(size: 13, weight: .semibold))
                         Text(provider.info.note).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
                     Spacer()
                     if !provider.needsKey {
-                        StatusPill(text: "本机", color: .blue, symbol: "desktopcomputer")
+                        StatusPill(text: tr("本机", "Local"), color: .blue, symbol: "desktopcomputer")
                     } else if provider.key != nil {
-                        StatusPill(text: "已填 key", color: .green, symbol: "checkmark")
+                        StatusPill(text: tr("已填 key", "Key Set"), color: .green, symbol: "checkmark")
                     } else {
-                        StatusPill(text: "缺 key", color: .orange, symbol: "key")
+                        StatusPill(text: tr("缺 key", "No Key"), color: .orange, symbol: "key")
                     }
                     Image(systemName: "chevron.right")
                         .font(.system(size: 11, weight: .semibold))
@@ -706,10 +706,10 @@ private struct ProviderRow: View {
 
             if expanded {
                 VStack(spacing: 8) {
-                    Row(symbol: "tag", tint: .gray, title: "名字") {
+                    Row(symbol: "tag", tint: .gray, title: tr("名字", "Name")) {
                         TextField("", text: $provider.name).frame(maxWidth: 280)
                     }
-                    Row(symbol: "link", tint: .blue, title: "接口地址") {
+                    Row(symbol: "link", tint: .blue, title: tr("接口地址", "Endpoint")) {
                         TextField("", text: $provider.baseURL, prompt: Text(provider.info.baseURL)).frame(maxWidth: 280)
                     }
                     if provider.needsKey {
@@ -718,17 +718,17 @@ private struct ProviderRow: View {
                                 SecureField("", text: $key).frame(maxWidth: 220)
                                     .onChange(of: key) { provider.setKey(key) }
                                 if let page = provider.info.keyPage, let url = URL(string: page) {
-                                    Link(destination: url) { Image(systemName: "arrow.up.right.square") }.help("去拿 key")
+                                    Link(destination: url) { Image(systemName: "arrow.up.right.square") }.help(tr("去拿 key", "Get a key"))
                                 }
                             }
                         }
                     }
                     HStack(spacing: 10) {
-                        Button(role: .destructive, action: remove) { Label("删除", systemImage: "trash") }
+                        Button(role: .destructive, action: remove) { Label(tr("删除", "Delete"), systemImage: "trash") }
                         Spacer()
                         if testing { ProgressView().controlSize(.small) }
                         if let test { Text(test).font(.caption).foregroundStyle(.secondary).lineLimit(2).textSelection(.enabled) }
-                        Button(action: runTest) { Label("测试连接", systemImage: "bolt.horizontal.circle") }.disabled(testing)
+                        Button(action: runTest) { Label(tr("测试连接", "Test Connection"), systemImage: "bolt.horizontal.circle") }.disabled(testing)
                     }
                 }
                 .padding(.leading, 42)
@@ -745,12 +745,12 @@ private struct ProviderRow: View {
         Task {
             defer { testing = false }
             if provider.kind == .soniox || provider.kind == .deepgram {
-                test = provider.key == nil ? "还没填 key" : "key 已保存，开始听时连接"
+                test = provider.key == nil ? tr("还没填 key", "No key yet") : tr("key 已保存，开始听时连接", "Key saved; connects when listening starts")
                 return
             }
             do {
                 let models = try await ModelList.fetch(provider)
-                test = "通了，有 \(models.count) 个模型"
+                test = tr("通了，有 \(models.count) 个模型", "Connected, \(models.count) models")
             } catch {
                 test = error.localizedDescription
             }
@@ -775,28 +775,28 @@ struct ModelPicker: View {
         HStack(spacing: 6) {
             // 这里要写成闭包：直接传方法（set: chooseProvider）会让 Swift 6.2 编译器在生成代码时崩溃
             Picker("", selection: Binding(get: { slot.providerID }, set: { chooseProvider($0) })) {
-                if sameAsReply { Text("跟回复一样").tag("") }
+                if sameAsReply { Text(tr("跟回复一样", "Same as Reply")).tag("") }
                 if !sameAsReply && !usable.contains(where: { $0.id == slot.providerID }) {
-                    Text(slot.providerID.isEmpty ? "选服务商" : "（已删除）").tag(slot.providerID)
+                    Text(slot.providerID.isEmpty ? tr("选服务商", "Select Provider") : tr("（已删除）", "(Deleted)")).tag(slot.providerID)
                 }
                 ForEach(usable) { provider in
-                    Label(provider.name, systemImage: provider.info.symbol).tag(provider.id)
+                    Label(provider.displayName, systemImage: provider.info.symbol).tag(provider.id)
                 }
             }
             .labelsHidden()
             .frame(width: 150)
             if !slot.providerID.isEmpty {
-                TextField("", text: $slot.model, prompt: Text("模型")).frame(width: 170)
+                TextField("", text: $slot.model, prompt: Text(tr("模型", "Model"))).frame(width: 170)
                 Menu {
                     ForEach(choices, id: \.self) { model in Button(model) { slot.model = model } }
                     Divider()
-                    Button(loading ? "读取中…" : "从服务商读取列表", action: load).disabled(loading)
+                    Button(loading ? tr("读取中…", "Loading…") : tr("从服务商读取列表", "Load List from Provider"), action: load).disabled(loading)
                 } label: {
                     Image(systemName: "chevron.down")
                 }
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .help("推荐的模型，或者从服务商读取")
+                .help(tr("推荐的模型，或者从服务商读取", "Suggested models, or load from the provider"))
             }
         }
     }
@@ -839,15 +839,15 @@ private struct LanguageField: View {
 }
 
 extension Languages {
-    static let speechChoices: [(code: String, name: String)] = [
-        ("en-US", "英语（美国）"), ("en-GB", "英语（英国）"), ("en-IN", "英语（印度）"), ("zh-CN", "中文（普通话）"),
-        ("zh-TW", "中文（台湾）"), ("ja-JP", "日语"), ("ko-KR", "韩语"), ("de-DE", "德语"), ("fr-FR", "法语"),
-        ("es-ES", "西班牙语"),
-    ]
-    static let translationChoices: [(code: String, name: String)] = [
-        ("zh-Hans", "简体中文"), ("zh-Hant", "繁體中文"), ("en", "英语"), ("ja", "日语"), ("ko", "韩语"),
-        ("de", "德语"), ("fr", "法语"), ("es", "西班牙语"),
-    ]
+    static var speechChoices: [(code: String, name: String)] { [
+        ("en-US", tr("英语（美国）", "English (US)")), ("en-GB", tr("英语（英国）", "English (UK)")), ("en-IN", tr("英语（印度）", "English (India)")), ("zh-CN", tr("中文（普通话）", "Chinese (Mandarin)")),
+        ("zh-TW", tr("中文（台湾）", "Chinese (Taiwan)")), ("ja-JP", tr("日语", "Japanese")), ("ko-KR", tr("韩语", "Korean")), ("de-DE", tr("德语", "German")), ("fr-FR", tr("法语", "French")),
+        ("es-ES", tr("西班牙语", "Spanish")),
+    ] }
+    static var translationChoices: [(code: String, name: String)] { [
+        ("zh-Hans", tr("简体中文", "Simplified Chinese")), ("zh-Hant", tr("繁體中文", "Traditional Chinese")), ("en", tr("英语", "English")), ("ja", tr("日语", "Japanese")), ("ko", tr("韩语", "Korean")),
+        ("de", tr("德语", "German")), ("fr", tr("法语", "French")), ("es", tr("西班牙语", "Spanish")),
+    ] }
 }
 
 // MARK: - 翻译
@@ -859,22 +859,22 @@ private struct TranslationPage: View {
     var body: some View {
         Form {
             Section {
-                Row(symbol: "character.bubble.fill", tint: .green, title: "显示译文") {
+                Row(symbol: "character.bubble.fill", tint: .green, title: tr("显示译文", "Show Translation")) {
                     Toggle("", isOn: Binding(get: { settings.value.translationEnabled },
                                              set: { settings.value.translationEnabled = $0; session.translationToggled() }))
                         .labelsHidden()
                 }
-                Row(symbol: "arrow.right.circle.fill", tint: .green, title: "译成") {
+                Row(symbol: "arrow.right.circle.fill", tint: .green, title: tr("译成", "Translate To")) {
                     LanguageField(code: $settings.value.targetLanguage, choices: Languages.translationChoices)
                 }
             }
             Section {
-                OptionCard(symbol: "apple.logo", title: "Apple 本机翻译", detail: "免费、不联网、快。第一次要下载语言包。",
+                OptionCard(symbol: "apple.logo", title: tr("Apple 本机翻译", "Apple On-Device Translation"), detail: tr("免费、不联网、快。第一次要下载语言包。", "Free, offline and fast. The first use needs a language pack download."),
                            selected: settings.value.translationProvider == .apple) { settings.value.translationProvider = .apple }
-                OptionCard(symbol: "sparkles", title: "大模型翻译", detail: "更懂上下文和术语。默认用回复的模型，也可以单独选。",
+                OptionCard(symbol: "sparkles", title: tr("大模型翻译", "LLM Translation"), detail: tr("更懂上下文和术语。默认用回复的模型，也可以单独选。", "Better with context and terminology. Uses the Reply model by default, or pick a separate one."),
                            selected: settings.value.translationProvider == .llm) { settings.value.translationProvider = .llm }
             } header: {
-                Text("翻译方式")
+                Text(tr("翻译方式", "Translation Method"))
             }
             Section {
                 if settings.value.translationProvider == .apple {
@@ -883,12 +883,12 @@ private struct TranslationPage: View {
                         TranslationDownload(source: settings.value.localLocale, target: settings.value.targetLanguage)
                     }
                 } else {
-                    Row(symbol: "server.rack", tint: .indigo, title: "翻译用的模型") {
+                    Row(symbol: "server.rack", tint: .indigo, title: tr("翻译用的模型", "Translation Model")) {
                         ModelPicker(settings: settings, slot: $settings.value.translationSlot, capability: .chat, sameAsReply: true)
                     }
                 }
             } header: {
-                Text(settings.value.translationProvider == .apple ? "语言包" : "模型")
+                Text(settings.value.translationProvider == .apple ? tr("语言包", "Language Packs") : tr("模型", "Model"))
             }
         }
         .formStyle(.grouped)
@@ -907,9 +907,9 @@ private struct TranslationDownload: View {
         Row(symbol: "arrow.down.circle.fill", tint: .green,
             title: "\(Languages.name(source)) → \(Languages.name(target))", detail: message.isEmpty ? nil : message) {
             if installed == true {
-                StatusPill(text: "已就绪", color: .green, symbol: "checkmark")
+                StatusPill(text: tr("已就绪", "Ready"), color: .green, symbol: "checkmark")
             } else {
-                Button("下载") {
+                Button(tr("下载", "Download")) {
                     if configuration == nil {
                         configuration = .init(source: Locale.Language(identifier: source), target: Locale.Language(identifier: target))
                     } else {
@@ -930,7 +930,7 @@ private struct TranslationDownload: View {
             let status = await LanguageAvailability().status(from: Locale.Language(identifier: source),
                                                              to: Locale.Language(identifier: target))
             installed = status == .installed
-            message = status == .unsupported ? "不支持这对语言" : ""
+            message = status == .unsupported ? tr("不支持这对语言", "This language pair isn't supported") : ""
         }
     }
 }
@@ -952,9 +952,9 @@ private struct ScreenshotPage: View {
                 }
                 .padding(.vertical, 2)
             } header: {
-                Text("⌃⌥S 截哪里")
+                Text(tr("⌃⌥S 截哪里", "What ⌃⌥S Captures"))
             } footer: {
-                Text("最前面的 App：按快捷键时你正在用的那个窗口（比如 Teams），Tyto 会认出是哪个 App。⌃⌥A 总是框选。截图要「屏幕录制」权限。")
+                Text(tr("最前面的 App：按快捷键时你正在用的那个窗口（比如 Teams），Tyto 会认出是哪个 App。⌃⌥A 总是框选。截图要「屏幕录制」权限。", "Frontmost App: the window you're using when you press the shortcut (e.g. Teams); Tyto recognizes which app it is. ⌃⌥A always selects an area. Screenshots need the Screen Recording permission."))
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -964,25 +964,25 @@ private struct ScreenshotPage: View {
                                selected: settings.value.screenshotMode == mode) { settings.value.screenshotMode = mode }
                 }
                 if settings.value.screenshotMode == .visionModel {
-                    Row(symbol: "eye.fill", tint: .teal, title: "看图模型") {
+                    Row(symbol: "eye.fill", tint: .teal, title: tr("看图模型", "Vision Model")) {
                         ModelPicker(settings: settings, slot: $settings.value.visionSlot, capability: .vision)
                     }
                 }
             } header: {
-                Text("怎么读懂截图")
+                Text(tr("怎么读懂截图", "How to Read the Screenshot"))
             }
 
             Section {
                 OllamaCatalog(settings: settings)
             } header: {
-                Text("文字识别和本机看图模型")
+                Text(tr("文字识别和本机看图模型", "Text Recognition & On-Device Vision Models"))
             } footer: {
-                Text("系统自带的文字识别不用下载，最小最快。想让截图不出这台 Mac 又能看懂版面，就下载一个本机看图模型（通过 Ollama），点「用这个」。这几个模型 16 GB 内存的笔记本也跑得动。")
+                Text(tr("系统自带的文字识别不用下载，最小最快。想让截图不出这台 Mac 又能看懂版面，就下载一个本机看图模型（通过 Ollama），点「用这个」。这几个模型 16 GB 内存的笔记本也跑得动。", "Built-in text recognition needs no download and is the smallest and fastest. To keep screenshots on this Mac and still understand the layout, download an on-device vision model (via Ollama) and click “Use This”. These models run on a laptop with 16 GB of memory."))
                     .font(.caption).foregroundStyle(.secondary)
             }
 
             Section {
-                Row(symbol: "doc.on.clipboard.fill", tint: .teal, title: "自动复制第一个回复", detail: "生成好后直接 ⌘V 粘贴发送") {
+                Row(symbol: "doc.on.clipboard.fill", tint: .teal, title: tr("自动复制第一个回复", "Copy First Reply Automatically"), detail: tr("生成好后直接 ⌘V 粘贴发送", "Paste and send with ⌘V once it's ready")) {
                     Toggle("", isOn: $settings.value.copyFirstScreenshotReply).labelsHidden()
                 }
             }
@@ -1031,27 +1031,27 @@ private struct OllamaCatalog: View {
             HStack(spacing: 12) {
                 IconTile(symbol: "text.viewfinder", colors: [Color(red: 0.55, green: 0.58, blue: 0.65), Color(red: 0.35, green: 0.37, blue: 0.45)], size: 30)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("系统文字识别（Apple Vision）").font(.system(size: 13, weight: .semibold))
-                    Text("系统自带，不用下载；中英日文；聊天截图约 0.3 秒，整个 5K 屏约 0.6 秒").font(.caption).foregroundStyle(.secondary)
+                    Text(tr("系统文字识别（Apple Vision）", "System Text Recognition (Apple Vision)")).font(.system(size: 13, weight: .semibold))
+                    Text(tr("系统自带，不用下载；中英日文；聊天截图约 0.3 秒，整个 5K 屏约 0.6 秒", "Built in, no download; Chinese, English, Japanese; about 0.3 s for a chat screenshot, 0.6 s for a full 5K screen")).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                StatusPill(text: "已就绪", color: .green, symbol: "checkmark")
+                StatusPill(text: tr("已就绪", "Ready"), color: .green, symbol: "checkmark")
             }
 
             HStack(spacing: 12) {
                 IconTile(symbol: "shippingbox.fill", colors: [Color(red: 0.25, green: 0.25, blue: 0.28), Color(red: 0.08, green: 0.08, blue: 0.10)], size: 30)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Ollama").font(.system(size: 13, weight: .semibold))
-                    Text(version.map { "\($0) 正在运行" } ?? (checked ? "没检测到。装好并打开后点「重新检测」" : "检测中…"))
+                    Text(version.map { tr("\($0) 正在运行", "\($0) running") } ?? (checked ? tr("没检测到。装好并打开后点「重新检测」", "Not detected. Install and open it, then click Check Again") : tr("检测中…", "Checking…")))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 if version == nil, checked {
-                    Button("下载 Ollama") { NSWorkspace.shared.open(URL(string: "https://ollama.com/download")!) }
+                    Button(tr("下载 Ollama", "Download Ollama")) { NSWorkspace.shared.open(URL(string: "https://ollama.com/download")!) }
                 }
                 Button { Task { await refresh() } } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.borderless)
-                    .help("重新检测")
+                    .help(tr("重新检测", "Check Again"))
             }
 
             ForEach(Ollama.recommended) { model in
@@ -1084,13 +1084,13 @@ private struct OllamaCatalog: View {
             }
             Spacer()
             if inUse {
-                StatusPill(text: "正在用", color: .accentColor, symbol: "checkmark")
+                StatusPill(text: tr("正在用", "In Use"), color: .accentColor, symbol: "checkmark")
             } else if isInstalled {
-                Button("用这个") { use(model.id) }
+                Button(tr("用这个", "Use This")) { use(model.id) }
             } else if downloading[model.id] != nil {
                 Text("\(Int((downloading[model.id] ?? 0) * 100))%").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             } else {
-                Button { download(model.id) } label: { Label("下载", systemImage: "arrow.down.circle") }
+                Button { download(model.id) } label: { Label(tr("下载", "Download"), systemImage: "arrow.down.circle") }
                     .disabled(version == nil)
             }
         }
@@ -1140,7 +1140,7 @@ private struct AppearancePage: View {
     var body: some View {
         Form {
             Section {
-                Row(symbol: "globe", tint: .blue, title: "界面语言 · Language") {
+                Row(symbol: "globe", tint: .blue, title: tr("界面语言 · Language", "Language")) {
                     Picker("", selection: $settings.value.language) {
                         ForEach(AppLanguage.allCases) { Text($0.label).tag($0) }
                     }
@@ -1156,10 +1156,10 @@ private struct AppearancePage: View {
                 }
                 .padding(.vertical, 2)
             } header: {
-                Text("主题")
+                Text(tr("主题", "Theme"))
             }
             Section {
-                Row(symbol: "circle.lefthalf.filled", tint: .pink, title: "底色浓度", detail: "最左边完全透明；往右先出现玻璃，再加深底色") {
+                Row(symbol: "circle.lefthalf.filled", tint: .pink, title: tr("底色浓度", "Tint"), detail: tr("最左边完全透明；往右先出现玻璃，再加深底色", "Fully transparent at the far left; moving right adds glass first, then a darker tint")) {
                     HStack(spacing: 8) {
                         Image(systemName: "circle.dotted").foregroundStyle(.secondary)
                         Slider(value: $settings.value.overlayOpacity, in: 0...0.95).frame(width: 200)
@@ -1168,7 +1168,7 @@ private struct AppearancePage: View {
                             .foregroundStyle(.secondary).frame(width: 34, alignment: .trailing)
                     }
                 }
-                Row(symbol: "textformat.size", tint: .pink, title: "字号") {
+                Row(symbol: "textformat.size", tint: .pink, title: tr("字号", "Font Size")) {
                     HStack(spacing: 8) {
                         Image(systemName: "textformat.size.smaller").foregroundStyle(.secondary)
                         Slider(value: $settings.value.fontSize, in: 11...24, step: 1).frame(width: 200)
@@ -1190,7 +1190,7 @@ private struct AppearancePage: View {
                 .frame(height: 510)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             } header: {
-                Text("预览（背景是模拟的会议画面）")
+                Text(tr("预览（背景是模拟的会议画面）", "Preview (simulated meeting background)"))
             }
         }
         .formStyle(.grouped)
@@ -1228,7 +1228,7 @@ private struct ThemeSwatch: View {
                 HStack(spacing: 5) {
                     Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(selected ? Color.accentColor : Color.secondary)
-                    Text(theme.label.components(separatedBy: "：").first ?? "").font(.system(size: 12, weight: .semibold))
+                    Text(theme.label.components(separatedBy: CharacterSet(charactersIn: "：:")).first ?? "").font(.system(size: 12, weight: .semibold))
                 }
             }
             .padding(8)
@@ -1244,13 +1244,13 @@ private struct ThemeSwatch: View {
 
 private struct ShortcutsPage: View {
     private let items: [(keys: [String], title: String, symbol: String)] = [
-        (["⌃", "⌥", "L"], "开始 / 停止听", "record.circle"),
-        (["⌃", "⌥", "R"], "回复（选中的句子，或最近的话）", "arrowshape.turn.up.left.fill"),
-        (["⌃", "⌥", "S"], "截屏回复（按设置截最前面的 App 或整个屏幕）", "camera.viewfinder"),
-        (["⌃", "⌥", "A"], "截屏回复：框选一块", "rectangle.dashed"),
-        (["⌃", "⌥", "T"], "显示 / 隐藏悬浮窗", "macwindow"),
-        (["⌃", "⌥", "P"], "点击穿透开 / 关", "cursorarrow.motionlines"),
-        (["⌃", "⌥", "Q"], "退出 Tyto", "power"),
+        (["⌃", "⌥", "L"], tr("开始 / 停止听", "Start / Stop Listening"), "record.circle"),
+        (["⌃", "⌥", "R"], tr("回复（选中的句子，或最近的话）", "Reply (selected lines, or the latest)"), "arrowshape.turn.up.left.fill"),
+        (["⌃", "⌥", "S"], tr("截屏回复（按设置截最前面的 App 或整个屏幕）", "Screenshot Reply (frontmost app or entire screen, per settings)"), "camera.viewfinder"),
+        (["⌃", "⌥", "A"], tr("截屏回复：框选一块", "Screenshot Reply: Select Area"), "rectangle.dashed"),
+        (["⌃", "⌥", "T"], tr("显示 / 隐藏悬浮窗", "Show / Hide Overlay"), "macwindow"),
+        (["⌃", "⌥", "P"], tr("点击穿透开 / 关", "Click-Through On / Off"), "cursorarrow.motionlines"),
+        (["⌃", "⌥", "Q"], tr("退出 Tyto", "Quit Tyto"), "power"),
     ]
 
     var body: some View {
@@ -1292,48 +1292,48 @@ private struct PermissionsPage: View {
     var body: some View {
         Form {
             Section {
-                Row(symbol: "mic.fill", tint: .green, title: "麦克风", detail: "本地那一路") {
+                Row(symbol: "mic.fill", tint: .green, title: tr("麦克风", "Microphone"), detail: tr("本地那一路", "The Local channel")) {
                     HStack(spacing: 8) {
                         switch microphone {
-                        case .granted: StatusPill(text: "已允许", color: .green, symbol: "checkmark")
-                        case .denied: StatusPill(text: "被拒绝", color: .red, symbol: "xmark")
-                        default: StatusPill(text: "还没问过", color: .secondary)
+                        case .granted: StatusPill(text: tr("已允许", "Allowed"), color: .green, symbol: "checkmark")
+                        case .denied: StatusPill(text: tr("被拒绝", "Denied"), color: .red, symbol: "xmark")
+                        default: StatusPill(text: tr("还没问过", "Not Asked"), color: .secondary)
                         }
-                        Button("打开设置") { Capture.openPrivacySettings("Privacy_Microphone") }
+                        Button(tr("打开设置", "Open Settings")) { Capture.openPrivacySettings("Privacy_Microphone") }
                     }
                 }
-                Row(symbol: "speaker.wave.2.fill", tint: .blue, title: "系统录音", detail: "远端那一路，第一次开始听时询问") {
-                    Button("打开设置") { Capture.openPrivacySettings("Privacy_ScreenCapture") }
+                Row(symbol: "speaker.wave.2.fill", tint: .blue, title: tr("系统录音", "System Audio Recording"), detail: tr("远端那一路，第一次开始听时询问", "The Remote channel; asked the first time you start listening")) {
+                    Button(tr("打开设置", "Open Settings")) { Capture.openPrivacySettings("Privacy_ScreenCapture") }
                 }
-                Row(symbol: "camera.viewfinder", tint: .teal, title: "屏幕录制", detail: "截屏回复") {
+                Row(symbol: "camera.viewfinder", tint: .teal, title: tr("屏幕录制", "Screen Recording"), detail: tr("截屏回复", "Screenshot Reply")) {
                     HStack(spacing: 8) {
-                        StatusPill(text: screen ? "已允许" : "未允许", color: screen ? .green : .orange,
+                        StatusPill(text: screen ? tr("已允许", "Allowed") : tr("未允许", "Not Allowed"), color: screen ? .green : .orange,
                                    symbol: screen ? "checkmark" : "exclamationmark")
-                        Button("打开设置") { Capture.openPrivacySettings("Privacy_ScreenCapture") }
+                        Button(tr("打开设置", "Open Settings")) { Capture.openPrivacySettings("Privacy_ScreenCapture") }
                     }
                 }
             } header: {
-                Text("权限")
+                Text(tr("权限", "Permissions"))
             } footer: {
-                Text("在系统设置里打开权限后，要退出再打开 Tyto 才生效。").font(.caption).foregroundStyle(.secondary)
+                Text(tr("在系统设置里打开权限后，要退出再打开 Tyto 才生效。", "After enabling a permission in System Settings, quit and reopen Tyto for it to take effect.")).font(.caption).foregroundStyle(.secondary)
             }
 
             Section {
-                folderRow("会话记录", symbol: "tray.full.fill", url: SessionModel.folder)
-                folderRow("技能", symbol: "wand.and.sparkles", url: SkillStore.folder)
-                folderRow("运行日志", symbol: "doc.text.magnifyingglass", url: URL.libraryDirectory.appending(path: "Logs/Tyto.log"))
+                folderRow(tr("会话记录", "Session Transcripts"), symbol: "tray.full.fill", url: SessionModel.folder)
+                folderRow(tr("技能", "Skills"), symbol: "wand.and.sparkles", url: SkillStore.folder)
+                folderRow(tr("运行日志", "Run Log"), symbol: "doc.text.magnifyingglass", url: URL.libraryDirectory.appending(path: "Logs/Tyto.log"))
             } header: {
-                Text("数据放在哪")
+                Text(tr("数据放在哪", "Where Data Is Stored"))
             } footer: {
-                Text("设置存在 defaults 的 com.giomni.tyto 里，API key 存在钥匙串（服务名 com.giomni.tyto）。").font(.caption).foregroundStyle(.secondary)
+                Text(tr("设置存在 defaults 的 com.giomni.tyto 里，API key 存在钥匙串（服务名 com.giomni.tyto）。", "Settings are stored in defaults under com.giomni.tyto; API keys are in the Keychain (service com.giomni.tyto).")).font(.caption).foregroundStyle(.secondary)
             }
 
             Section {
                 HStack(spacing: 14) {
                     IconTile(symbol: "ear.fill", colors: SettingsPage.session.colors, size: 52)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Tyto 听译").font(.system(size: 16, weight: .bold))
-                        Text("版本 \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版")")
+                        Text(tr("Tyto 听译", "Tyto")).font(.system(size: 16, weight: .bold))
+                        Text(tr("版本 \(version)", "Version \(version)"))
                             .font(.caption).foregroundStyle(.secondary)
                         Text("© 2026 Ethan H.B. Zhou").font(.caption).foregroundStyle(.secondary)
                     }
@@ -1348,9 +1348,13 @@ private struct PermissionsPage: View {
         }
     }
 
+    private var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? tr("开发版", "dev build")
+    }
+
     private func folderRow(_ title: String, symbol: String, url: URL) -> some View {
         Row(symbol: symbol, tint: .blue, title: title, detail: url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) {
-            Button("在 Finder 中显示") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+            Button(tr("在 Finder 中显示", "Show in Finder")) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
         }
     }
 }

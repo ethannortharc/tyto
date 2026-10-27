@@ -141,7 +141,7 @@ final class SonioxSpeechEngine: SpeechEngine, @unchecked Sendable {
                 }
             } catch {
                 if !lock.withLock({ stopping }) {
-                    eventSink.yield(SpeechEvent(kind: .error, text: "Soniox 连接断了：\(error.localizedDescription)"))
+                    eventSink.yield(SpeechEvent(kind: .error, text: tr("Soniox 连接断了：\(error.localizedDescription)", "Soniox connection lost: \(error.localizedDescription)")))
                 }
                 finish()
                 return
@@ -153,7 +153,7 @@ final class SonioxSpeechEngine: SpeechEngine, @unchecked Sendable {
     private func handle(_ data: Data) -> Bool {
         guard let response = try? JSONDecoder().decode(Response.self, from: data) else { return false }
         if let code = response.error_code {
-            eventSink.yield(SpeechEvent(kind: .error, text: "Soniox 出错（\(code)）：\(response.error_message ?? "")"))
+            eventSink.yield(SpeechEvent(kind: .error, text: tr("Soniox 出错（\(code)）：\(response.error_message ?? "")", "Soniox error (\(code)): \(response.error_message ?? "")")))
             return true
         }
 

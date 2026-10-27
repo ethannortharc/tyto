@@ -17,7 +17,7 @@ enum LLMFactory {
         let provider = resolved.provider
         let base = provider.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let baseURL = URL(string: base.isEmpty ? provider.info.baseURL : base) else {
-            throw TytoError.server("「\(provider.name)」的接口地址不对：\(provider.baseURL)")
+            throw TytoError.server(tr("「\(provider.name)」的接口地址不对：\(provider.baseURL)", "Invalid endpoint address for “\(provider.name)”: \(provider.baseURL)"))
         }
         switch provider.kind {
         case .anthropic:
@@ -30,7 +30,7 @@ enum LLMFactory {
             // Ollama 也提供 OpenAI 兼容接口（/v1/chat/completions），本机不用 key
             return OpenAICompatibleClient(baseURL: baseURL, apiKey: nil, model: resolved.model, effort: "")
         case .soniox, .deepgram:
-            throw TytoError.server("「\(provider.name)」是语音识别服务，不能用来回复")
+            throw TytoError.server(tr("「\(provider.name)」是语音识别服务，不能用来回复", "“\(provider.name)” is a speech recognition service and can't be used for replies"))
         }
     }
 
@@ -78,10 +78,10 @@ struct AnthropicClient: LLMClient {
                 return delta?["type"] as? String == "text_delta" ? .text(delta?["text"] as? String ?? "") : .skip
             case "message_delta":
                 let delta = event["delta"] as? [String: Any]
-                return delta?["stop_reason"] as? String == "refusal" ? .fail("模型拒绝回答这一条") : .skip
+                return delta?["stop_reason"] as? String == "refusal" ? .fail(tr("模型拒绝回答这一条", "The model declined to answer this one")) : .skip
             case "error":
                 let error = event["error"] as? [String: Any]
-                return .fail("Claude 出错：\(error?["message"] as? String ?? "未知错误")")
+                return .fail(tr("Claude 出错：\(error?["message"] as? String ?? "未知错误")", "Claude error: \(error?["message"] as? String ?? "unknown error")"))
             case "message_stop":
                 return .done
             default:
@@ -127,11 +127,11 @@ struct OpenAICompatibleClient: LLMClient {
         if !effort.isEmpty, baseURL.host()?.hasSuffix("openai.com") == true { body["reasoning_effort"] = effort }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
-        return SSE.stream(request, service: "大模型", done: "[DONE]") { event in
+        return SSE.stream(request, service: tr("大模型", "LLM"), done: "[DONE]") { event in
             let choices = event["choices"] as? [[String: Any]]
             let delta = choices?.first?["delta"] as? [String: Any]
             if let text = delta?["content"] as? String { return .text(text) }
-            if let error = event["error"] as? [String: Any] { return .fail("大模型出错：\(error["message"] as? String ?? "")") }
+            if let error = event["error"] as? [String: Any] { return .fail(tr("大模型出错：\(error["message"] as? String ?? "")", "LLM error: \(error["message"] as? String ?? "")")) }
             return .skip
         }
     }
@@ -166,7 +166,7 @@ enum SSE {
                     if let http = response as? HTTPURLResponse, http.statusCode != 200 {
                         var text = ""
                         for try await line in bytes.lines { text += line }
-                        throw TytoError.server("\(service)接口返回 \(http.statusCode)：\(errorMessage(text))")
+                        throw TytoError.server(tr("\(service)接口返回 \(http.statusCode)：\(errorMessage(text))", "\(service) API returned \(http.statusCode): \(errorMessage(text))"))
                     }
                     lines: for try await line in bytes.lines {
                         guard line.hasPrefix("data:") else { continue }

@@ -31,10 +31,10 @@ enum Capture {
     /// 截最前面那个 App 的窗口（不含 Tyto 自己）。按快捷键时最前面的就是你正在用的那个，比如 Teams。
     static func frontWindow() async throws -> CapturedImage {
         try ensurePermission()
-        guard let target = frontmostWindowInfo() else { throw TytoError.server("找不到可以截的窗口") }
+        guard let target = frontmostWindowInfo() else { throw TytoError.server(tr("找不到可以截的窗口", "No window to capture")) }
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
         guard let window = content.windows.first(where: { $0.windowID == target.windowID }) else {
-            throw TytoError.server("截不到「\(target.appName ?? "前台 App")」的窗口")
+            throw TytoError.server(tr("截不到「\(target.appName ?? "前台 App")」的窗口", "Can't capture the window of “\(target.appName ?? "the frontmost app")”"))
         }
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let config = SCStreamConfiguration()
@@ -58,7 +58,7 @@ enum Capture {
         }
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         guard let display = content.displays.first(where: { $0.displayID == displayID }) ?? content.displays.first else {
-            throw TytoError.server("找不到屏幕")
+            throw TytoError.server(tr("找不到屏幕", "No screen found"))
         }
         let filter = SCContentFilter(display: display, excludingWindows: [])
         let config = SCStreamConfiguration()
@@ -124,7 +124,7 @@ enum Capture {
     private static func png(_ image: CGImage) throws -> Data {
         let bitmap = NSBitmapImageRep(cgImage: image)
         guard let data = bitmap.representation(using: .png, properties: [:]) else {
-            throw TytoError.server("截图转不了 PNG")
+            throw TytoError.server(tr("截图转不了 PNG", "Couldn't convert the screenshot to PNG"))
         }
         return data
     }

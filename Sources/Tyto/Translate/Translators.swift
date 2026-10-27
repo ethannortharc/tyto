@@ -60,8 +60,8 @@ enum Languages {
         Locale.Language(identifier: a).languageCode == Locale.Language(identifier: b).languageCode
     }
 
-    /// 语言代码的中文名，如 "en" → "英语"
+    /// 语言代码在当前界面语言下的名字，如 "en" → "英语" / "English"
     static func name(_ code: String) -> String {
-        Locale(identifier: "zh-Hans").localizedString(forIdentifier: code) ?? code
+        Locale(identifier: L10n.isEnglish ? "en" : "zh-Hans").localizedString(forIdentifier: code) ?? code
     }
 }
