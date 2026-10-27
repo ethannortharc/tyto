@@ -701,7 +701,7 @@ private struct AddProviderMenu: View {
                 ForEach(["anthropic", "openai", "openrouter", "gemini", "deepseek", "dashscope", "siliconflow", "groq"], id: \.self) { item($0) }
             }
             Section(tr("本机", "Local")) { ForEach(["ollama", "lmstudio"], id: \.self) { item($0) } }
-            Section(tr("语音识别", "Speech Recognition")) { ForEach(["soniox", "deepgram"], id: \.self) { item($0) } }
+            Section(tr("语音识别", "Speech Recognition")) { ForEach(["soniox", "assemblyai", "elevenlabs", "deepgram"], id: \.self) { item($0) } }
             Section { item("custom") }
         } label: {
             Label(tr("添加", "Add"), systemImage: "plus.circle.fill")
@@ -795,7 +795,7 @@ private struct ProviderRow: View {
         let provider = provider
         Task {
             defer { testing = false }
-            if provider.kind == .soniox || provider.kind == .deepgram {
+            if provider.kind.isStreamingSpeech {
                 test = provider.key == nil ? tr("还没填 key", "No key yet") : tr("key 已保存，开始听时连接", "Key saved; connects when listening starts")
                 return
             }

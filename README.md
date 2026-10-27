@@ -34,7 +34,7 @@ A floating meeting assistant for macOS. It turns what people say into live capti
 - **Replies panel**: every reply stays in a column beside the overlay (⌃⌥B), newest first; delete any of them, and they are saved with the session. Under a meeting reply Tyto adds *What you said*: what the local speaker named "Me" said after that line and before the other side moved on, tagged *Followed*, *Rephrased* or *No reply*. Those captions get a small icon that jumps to the reply, and the exported notes include the comparison.
 - **Prompter**: notes you prepared before the meeting, in their own see-through window (⌃⌥N) that you can put anywhere, e.g. right under the camera. Markdown, HTML or plain text; edits to the file show up right away. The bar on top always shows which section you're in and opens the outline; ⌃⌥↑ / ⌃⌥↓ jump between sections. With *Follow* on, the notes scroll to and highlight the paragraph you're reading out. When the other side asks about something that has its own section, a hint shows up at the bottom and ⌃⌥J jumps there. Matching runs on your Mac and also uses the translation, so English speech finds Chinese notes.
 - **Screenshot replies**: ⌃⌥S captures the frontmost app (say, a Teams chat), works out who is asking what, and writes three replies you can paste; the first is already on your clipboard.
-- **Bring any model**: configure each provider once, then choose a model for replies, vision, translation and transcription. Supports Anthropic, OpenAI, OpenRouter, Gemini, DeepSeek, Tongyi Qwen, SiliconFlow, Groq, Soniox, Deepgram, local Ollama / LM Studio, and any OpenAI-compatible endpoint.
+- **Bring any model**: configure each provider once, then choose a model for replies, vision, translation and transcription. Supports Anthropic, OpenAI, OpenRouter, Gemini, DeepSeek, Tongyi Qwen, SiliconFlow, Groq, Soniox, AssemblyAI, ElevenLabs, Deepgram, local Ollama / LM Studio, and any OpenAI-compatible endpoint.
 - **Looks**: macOS 26 Liquid Glass with three palettes; background from fully clear to deep; adjustable font size.
 
 ## Install
@@ -103,7 +103,7 @@ They work while the meeting app is in front.
 | SiliconFlow | Replies, vision, transcription |
 | Groq | Replies, transcription (very fast Whisper) |
 | Ollama / LM Studio (local) | Replies, vision; nothing leaves your Mac |
-| Soniox / Deepgram | Real-time transcription |
+| Soniox / AssemblyAI / ElevenLabs / Deepgram | Real-time transcription |
 | Custom | Any OpenAI-compatible endpoint (company gateway, self-hosted Whisper…) |
 
 ## Four ways to transcribe
@@ -113,9 +113,22 @@ Choose on the *Listening* page:
 | Method | Providers | Notes |
 |---|---|---|
 | Apple on-device | — | Free and offline. One language per channel, no speaker labels |
-| Real-time service | Soniox, Deepgram | Words appear as people speak; speaker labels; best for meetings |
+| Real-time service | Soniox, AssemblyAI, ElevenLabs, Deepgram | Words appear as people speak; best for meetings. All but ElevenLabs label speakers |
 | Transcription API | OpenAI, Groq, SiliconFlow, self-hosted Whisper | Sends each sentence after a 0.7 s pause; a second or two behind |
 | Audio model | OpenRouter, Gemini and other models that accept audio | Same; handles mixed languages |
+
+### Comparing real-time services
+
+`--compare-speech` plays one recording to several services at once, at real-time speed, and writes a report: error rate (overall, Chinese characters, English words), whether speakers were told apart, time to first text, time from the end of a sentence to its final text, and price per hour.
+
+```sh
+echo "$SONIOX_KEY" | Tyto --set-key soniox        # keys go to the keychain; same for assemblyai, elevenlabs
+scripts/speech-sample.py /tmp/sample               # optional: a synthetic four-person meeting with its reference text
+Tyto --compare-speech /tmp/sample/meeting.wav --reference /tmp/sample/meeting.txt \
+     --providers soniox,assemblyai,elevenlabs,apple:en-US --out /tmp/compare
+```
+
+The reference is the correct text, one line per sentence; write each line as `Speaker: text` to score speakers. `provider:model` picks a model (for example `assemblyai:universal-3-5-pro`); `apple:en-US` adds the free on-device engine as a baseline. A real meeting recording tells you more than the synthetic sample.
 
 If you use speakers instead of headphones, the microphone also hears the remote side. With *Remove echo* on, a local line that starts while the remote side is talking and repeats most of its words is dropped; replies that quote the other side are kept.
 
@@ -196,6 +209,8 @@ Check each part without a meeting (arguments to `build/Tyto.app/Contents/MacOS/T
 | `--selftest-models <provider id>` | List a provider's models |
 | `--selftest-settings` | Print current settings (read only) |
 | `--selftest-echo` / `--selftest-deepgram` | Echo rule; Deepgram message parsing |
+| `--selftest-streaming` | AssemblyAI and ElevenLabs message parsing; scoring used by `--compare-speech` |
+| `--compare-speech <audio> [--reference text] [--providers list] [--hints en,zh] [--out dir]` | Several real-time services on the same recording; see *Comparing real-time services* |
 | `--render-preview <dir>` / `--render-settings <dir>` | Draw the overlay / settings pages to images (no screen capture) |
 | `--selftest-glass <dir> [--light] [--auto]` | Real glass rendering (captures only Tyto's own windows); `--light` over a white page, `--auto` with the automatic text color |
 | `--selftest-backdrop` | Auto text color: measure a white page and a meeting backdrop, check white vs. black |
@@ -210,7 +225,7 @@ Add `--settings-json '{...}'` to any of them to override settings without saving
 Sources/Tyto/
   App/        launch, menus, Dock, global shortcuts, auto-update (Sparkle), move to Applications, open at login
   Audio/      system audio (Core Audio process tap), microphone, resampling
-  Speech/     Apple SpeechAnalyzer, Soniox, Deepgram, pause-based chunking
+  Speech/     Apple SpeechAnalyzer, Soniox, AssemblyAI, ElevenLabs, Deepgram, pause-based chunking
   Translate/  Apple on-device translation, model translation
   Screenshot/ frontmost app / screen / area capture, on-device OCR
   LLM/        Claude / OpenAI-compatible / Ollama clients, model lists, prompts
@@ -225,7 +240,7 @@ Sources/ShareCheck/   screen-share check app
 
 - Remote audio is every app's sound except Tyto's — don't play music or videos during a meeting.
 - Pull-down menus on the overlay are drawn by the system and may show briefly in a screen share while open.
-- Soniox and Deepgram follow their published protocols but haven't run through long real meetings yet.
+- Soniox, AssemblyAI, ElevenLabs and Deepgram follow their published protocols and pass against local mock servers, but haven't run through long real meetings yet.
 - Hiding during a Google Meet share in Chrome hasn't been tested directly (Chrome uses the same ScreenCaptureKit path, which has been).
 
 ## License

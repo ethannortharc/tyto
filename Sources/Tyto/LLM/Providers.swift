@@ -20,7 +20,7 @@ enum ModelList {
             return try await ids(request, list: "data", field: "id")
         case .ollama:
             return try await Ollama.installed(host: Ollama.host(from: baseURL))
-        case .soniox, .deepgram:
+        case .soniox, .deepgram, .assemblyai, .elevenlabs:
             // 实时识别服务没有列模型的接口，用推荐的
             return provider.info.suggested[.streamingSpeech] ?? []
         }

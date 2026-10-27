@@ -29,7 +29,7 @@ enum LLMFactory {
         case .ollama:
             // Ollama 也提供 OpenAI 兼容接口（/v1/chat/completions），本机不用 key
             return OpenAICompatibleClient(baseURL: baseURL, apiKey: nil, model: resolved.model, effort: "")
-        case .soniox, .deepgram:
+        case .soniox, .deepgram, .assemblyai, .elevenlabs:
             throw TytoError.server(tr("「\(provider.name)」是语音识别服务，不能用来回复", "“\(provider.name)” is a speech recognition service and can't be used for replies"))
         }
     }

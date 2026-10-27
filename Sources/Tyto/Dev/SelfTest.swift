@@ -17,6 +17,9 @@ import Foundation
 ///   Tyto --selftest-models <服务商 id>                                     读这个服务商的模型列表
 ///   Tyto --selftest-settings                                              读出现在的设置（老设置会被换算），只看不写
 ///   Tyto --selftest-deepgram                                              Deepgram 返回消息的解析
+///   Tyto --selftest-streaming                                             AssemblyAI、ElevenLabs 返回消息的解析
+///   Tyto --compare-speech <音频> [--reference 参考稿] [--providers soniox,assemblyai,elevenlabs] [--hints en,zh] [--out 文件夹]
+///                                                                         几家实时识别同时听同一段音频，比错字、说话人、延迟、价钱
 ///   以上自测都可以加 --settings-json '{...}'，临时改设置，不写回
 ///   Tyto --selftest-glass <文件夹> [--light]                               真实玻璃效果：悬浮窗盖在模拟会议画面（或白底页面）上，只截这两个窗口
 ///   Tyto --render-settings <文件夹>                                        把设置窗口每一页画成图片（窗口建在屏幕外，不截屏）
@@ -60,6 +63,19 @@ enum SelfTest {
         }
         if arguments.contains("--selftest-deepgram") {
             Task { exit(await deepgram()) }
+            return true
+        }
+        if arguments.contains("--selftest-streaming") {
+            Task { exit(await streamingParsers()) }
+            return true
+        }
+        if let file = value(after: "--compare-speech") {
+            let providers = value(after: "--providers") ?? "soniox,assemblyai,elevenlabs"
+            let hints = (value(after: "--hints") ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            Task {
+                exit(await SpeechCompare.run(file: file, reference: value(after: "--reference"), providers: providers,
+                                             hints: hints, out: value(after: "--out"), settings: current))
+            }
             return true
         }
         if let target = value(after: "--selftest-capture") {
@@ -379,6 +395,93 @@ enum SelfTest {
             && finals[1].contains("说话人1｜Sure, let me check.") && lines.filter { $0.hasPrefix("endOfUtterance") }.count == 2
         print(ok ? "解析正确" : "解析不对")
         return ok ? 0 : 1
+    }
+
+    /// AssemblyAI、ElevenLabs 的典型返回喂进去看解析出的事件；再检查对比识别的算分
+    static func streamingParsers() async -> Int32 {
+        func run(_ handle: (Data) -> Void, _ engine: SpeechEngine, _ messages: [String]) async -> [SpeechEvent] {
+            let collector = Task { () -> [SpeechEvent] in
+                var events: [SpeechEvent] = []
+                for await event in engine.events { events.append(event) }
+                return events
+            }
+            for message in messages { handle(Data(message.utf8)) }
+            await engine.stop()
+            return await collector.value
+        }
+        func show(_ name: String, _ events: [SpeechEvent]) {
+            print("\(name)：")
+            for event in events where event.kind != .partial || !event.text.isEmpty {
+                print("  \(event.kind)｜\(event.speaker.map { "说话人\($0)" } ?? "-")｜\(event.language ?? "-")｜\(event.text)")
+            }
+        }
+        var failed: [String] = []
+
+        let assembly = AssemblyAISpeechEngine(apiKey: "test", baseURL: "wss://streaming.assemblyai.com/v3/ws", model: "universal-3-6-pro", languages: [])
+        let assemblyEvents = await run({ assembly.handle($0) }, assembly, [
+            #"{"type":"Begin","id":"x","expires_at":1772570132,"configuration":{"model":"universal-3-6-pro"}}"#,
+            #"{"type":"SpeechStarted","timestamp":120,"confidence":0.9}"#,
+            #"{"type":"Turn","turn_order":0,"end_of_turn":false,"turn_is_formatted":false,"transcript":"Could we","words":[{"text":"Could","word_is_final":true},{"text":"we","word_is_final":true},{"text":"move","word_is_final":false}]}"#,
+            #"{"type":"Turn","turn_order":0,"end_of_turn":true,"turn_is_formatted":true,"speaker_label":"A","language_code":"en","transcript":"Could we move the launch? Sure, let me check.","words":[{"text":"Could","speaker":"A"},{"text":"we","speaker":"A"},{"text":"move","speaker":"PENDING"},{"text":"the","speaker":"A"},{"text":"launch?","speaker":"A"},{"text":"Sure,","speaker":"B"},{"text":"let","speaker":"B"},{"text":"me","speaker":"UNKNOWN"},{"text":"check.","speaker":"B"}]}"#,
+            #"{"type":"Turn","turn_order":1,"end_of_turn":true,"turn_is_formatted":false,"transcript":"wo men xia zhou","words":[]}"#,
+            #"{"type":"Turn","turn_order":1,"end_of_turn":true,"turn_is_formatted":true,"speaker_label":"B","language_code":"zh","transcript":"我们下周再说吧。","words":[{"text":"我们","speaker":"B"},{"text":"下周","speaker":"B"},{"text":"再说吧。","speaker":"B"}]}"#,
+            #"{"type":"Error","error":"Invalid audio chunk"}"#,
+            #"{"type":"Termination","audio_duration_seconds":6,"session_duration_seconds":7}"#,
+        ])
+        show("AssemblyAI", assemblyEvents)
+        let assemblyFinals = assemblyEvents.filter { $0.kind == .final }.map { "\($0.speaker.map(String.init) ?? "-")|\($0.text)" }
+        if assemblyFinals != ["0|Could we move the launch?", "1|Sure, let me check.", "1|我们下周再说吧。"] { failed.append("AssemblyAI 定稿：\(assemblyFinals)") }
+        if assemblyEvents.first(where: { $0.kind == .partial && !$0.text.isEmpty })?.text != "Could we move" { failed.append("AssemblyAI 未定的字") }
+        if assemblyEvents.filter({ $0.kind == .endOfUtterance }).count != 2 { failed.append("AssemblyAI 一句说完的次数") }
+        if assemblyEvents.filter({ $0.kind == .error }).count != 1 { failed.append("AssemblyAI 出错消息") }
+
+        let eleven = ElevenLabsSpeechEngine(apiKey: "test", baseURL: "wss://api.elevenlabs.io/v1/speech-to-text/realtime", model: "scribe_v2_realtime", language: nil)
+        let elevenEvents = await run({ eleven.handle($0) }, eleven, [
+            #"{"message_type":"session_started","session_id":"x","config":{}}"#,
+            #"{"message_type":"partial_transcript","text":"could we"}"#,
+            #"{"message_type":"committed_transcript","text":"Could we move the launch?"}"#,
+            #"{"message_type":"committed_transcript_with_timestamps","text":"Could we move the launch?","language_code":"en","words":[]}"#,
+            #"{"message_type":"committed_transcript_with_timestamps","text":"我们下周再说吧。","language_code":"zh","words":[]}"#,
+            #"{"message_type":"committed_transcript","text":"我们下周再说吧。"}"#,
+            #"{"message_type":"committed_transcript","text":"Yes."}"#,
+            #"{"message_type":"committed_transcript","text":"Yes."}"#,
+            #"{"message_type":"committed_transcript","text":""}"#,
+            #"{"message_type":"warning","warning":"Audio is quiet"}"#,
+            #"{"message_type":"auth_error","error":"Invalid API key"}"#,
+        ])
+        show("ElevenLabs", elevenEvents)
+        let elevenFinals = elevenEvents.filter { $0.kind == .final }.map { "\($0.language ?? "-")|\($0.text)" }
+        if elevenFinals != ["-|Could we move the launch?", "zh|我们下周再说吧。", "-|Yes.", "-|Yes."] { failed.append("ElevenLabs 定稿：\(elevenFinals)") }
+        if elevenEvents.filter({ $0.kind == .endOfUtterance }).count != 4 { failed.append("ElevenLabs 一句说完的次数") }
+        if elevenEvents.filter({ $0.kind == .error }).count != 1 { failed.append("ElevenLabs 出错消息") }
+
+        // 对比识别的算分
+        let tokens = ScoreToken.tokens("Hello, World! 我們的 API’s").map(\.text)
+        if tokens != ["hello", "world", "我", "们", "的", "api's"] { failed.append("分词：\(tokens)") }
+        let aligned = Alignment.align(["a", "b", "c"], ["x", "a", "y", "c", "d"], steps: true)
+        if aligned.distance != 3 { failed.append("编辑距离：\(aligned.distance)") }
+        let steps = (aligned.steps ?? []).map { step -> String in
+            switch step {
+            case .same(let i, let j): "=\(i)\(j)"
+            case .substitute(let i, let j): "~\(i)\(j)"
+            case .insert(let j): "+\(j)"
+            case .delete(let i): "-\(i)"
+            }
+        }
+        if steps != ["+0", "=01", "~12", "=23", "+4"] { failed.append("对齐：\(steps)") }
+        // 开头多出来的算到第一个字，后面多出来的算到前一个字
+        if Alignment.errorPositions(aligned.steps ?? []) != [1, 2, 0] { failed.append("错误位置：\(Alignment.errorPositions(aligned.steps ?? []))") }
+        let accuracy = Report.speakerAccuracy([("A", 0), ("A", 0), ("B", 1), ("B", 0)])
+        if abs(accuracy - 0.75) > 0.001 { failed.append("说话人分对：\(accuracy)") }
+        let reference = ReferenceText("Sarah: Hi there\n婷婷：你好")
+        if !reference.hasSpeakers || reference.lines.map({ $0.speaker ?? "" }) != ["Sarah", "婷婷"] { failed.append("参考稿说话人") }
+        if ReferenceText("Agenda: budget\nThen we talk").hasSpeakers { failed.append("参考稿不是每行都有说话人") }
+        let tone = (0..<16_000).map { Float(sin(Double($0) * 0.2)) * 0.1 }
+        let segments = SpeechActivity.segments([Float](repeating: 0, count: 16_000) + tone + [Float](repeating: 0, count: 16_000))
+        if segments.count != 1 || abs(segments[0].start - 1) > 0.05 || abs(segments[0].end - 2) > 0.05 { failed.append("说话段落：\(segments)") }
+
+        if failed.isEmpty { print("解析和算分都正确") } else { failed.forEach { print("不对：\($0)") } }
+        return failed.isEmpty ? 0 : 1
     }
 
     /// 截图并认出来源 App（只打印大小和 App 名字）

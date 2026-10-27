@@ -36,17 +36,7 @@ enum SpeechEngines {
             return AppleSpeechEngine(locale: channel == .remote ? settings.remoteLocale : settings.localLocale)
         case .streaming:
             let resolved = try settings.resolve(settings.speechSlot, for: tr("语音识别", "speech recognition"))
-            let provider = resolved.provider
-            switch provider.kind {
-            case .soniox:
-                return SonioxSpeechEngine(apiKey: provider.key ?? "", baseURL: provider.baseURL, model: resolved.model,
-                                          languageHints: hints)
-            case .deepgram:
-                return DeepgramSpeechEngine(apiKey: provider.key ?? "", baseURL: provider.baseURL, model: resolved.model,
-                                            language: hints.count == 1 ? hints[0] : "multi")
-            default:
-                throw TytoError.server(tr("「\(provider.name)」不是实时识别服务，请选 Soniox 或 Deepgram", "“\(provider.name)” isn't a real-time recognition service; pick Soniox or Deepgram"))
-            }
+            return try streaming(resolved.provider, model: resolved.model, languageHints: hints)
         case .transcription, .audioModel:
             let resolved = try settings.resolve(settings.speechSlot, for: tr("语音识别", "speech recognition"))
             let provider = resolved.provider
@@ -60,6 +50,25 @@ enum SpeechEngines {
                 : .audioChat(baseURL: url, apiKey: provider.key, model: resolved.model,
                              languages: hints.isEmpty ? "自动判断" : hints.joined(separator: "、"))
             return ChunkedSpeechEngine(backend: backend)
+        }
+    }
+
+    /// 实时识别服务的引擎（对比识别的自测也用它）
+    static func streaming(_ provider: Provider, model: String, languageHints hints: [String]) throws -> SpeechEngine {
+        let key = provider.key ?? ""
+        switch provider.kind {
+        case .soniox:
+            return SonioxSpeechEngine(apiKey: key, baseURL: provider.baseURL, model: model, languageHints: hints)
+        case .deepgram:
+            return DeepgramSpeechEngine(apiKey: key, baseURL: provider.baseURL, model: model,
+                                        language: hints.count == 1 ? hints[0] : "multi")
+        case .assemblyai:
+            return AssemblyAISpeechEngine(apiKey: key, baseURL: provider.baseURL, model: model, languages: hints)
+        case .elevenlabs:
+            return ElevenLabsSpeechEngine(apiKey: key, baseURL: provider.baseURL, model: model,
+                                          language: hints.count == 1 ? hints[0] : nil)
+        default:
+            throw TytoError.server(tr("「\(provider.name)」不是实时识别服务，请选 Soniox、AssemblyAI、ElevenLabs 或 Deepgram", "“\(provider.name)” isn't a real-time recognition service; pick Soniox, AssemblyAI, ElevenLabs or Deepgram"))
         }
     }
 }

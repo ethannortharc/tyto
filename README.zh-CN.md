@@ -34,7 +34,7 @@ Tyto 是仓鸮属的拉丁名——仓鸮在黑暗里只靠听声音就能定位
 - **回复面板**：生成的回复都留在悬浮窗旁边的一列里（⌃⌥B 开关），最新的在上面，可以删，跟着会话保存。会议里的回复下面会接上「你实际说的」：对方那句之后、对方再说别的之前，本地叫「我」的人说的话，并标上「基本照着说 / 改了说法 / 没回」；字幕里这几句旁边有个小图标，点了跳到对应的回复。导出的会议记录里也有这份对比。
 - **提词器**：会前准备的材料放在一个单独的透明窗口里（⌃⌥N），可以拖到任何地方，比如摄像头正下方。支持 Markdown、HTML、纯文本，文件改了马上刷新。顶上一条始终显示现在在哪一节，点开是目录；⌃⌥↑ / ⌃⌥↓ 跳上一节、下一节。开着「跟读」时，你照着稿子说，它就滚到你说到的那一段并高亮。对方问到稿子里某一节的内容时，底下会提示，⌃⌥J 跳过去。比对在本机做，也会用译文比，所以说英文也能对上中文稿。
 - **截屏回复**：⌃⌥S 截下最前面的 App（比如 Teams 的聊天），读懂谁在说什么、要你做什么，给出三个能直接粘贴的回复，第一个自动放进剪贴板。
-- **模型随便换**：服务商只配一次，回复、看图、翻译、语音识别各选各的模型。支持 Anthropic、OpenAI、OpenRouter、Gemini、DeepSeek、通义千问、硅基流动、Groq、Soniox、Deepgram、本机 Ollama / LM Studio，以及任何 OpenAI 兼容的接口。
+- **模型随便换**：服务商只配一次，回复、看图、翻译、语音识别各选各的模型。支持 Anthropic、OpenAI、OpenRouter、Gemini、DeepSeek、通义千问、硅基流动、Groq、Soniox、AssemblyAI、ElevenLabs、Deepgram、本机 Ollama / LM Studio，以及任何 OpenAI 兼容的接口。
 - **外观**：macOS 26 的玻璃材质，三套配色；底色可以从完全透明调到很深，字号可调。
 
 ## 安装
@@ -103,7 +103,7 @@ Tyto 是仓鸮属的拉丁名——仓鸮在黑暗里只靠听声音就能定位
 | 硅基流动 | 回复、看图、语音转写 |
 | Groq | 回复、语音转写（Whisper，很快） |
 | Ollama / LM Studio 本机 | 回复、看图；数据不出这台 Mac |
-| Soniox / Deepgram | 实时语音识别 |
+| Soniox / AssemblyAI / ElevenLabs / Deepgram | 实时语音识别 |
 | 自定义 | 任何 OpenAI 兼容的接口（公司网关、自建 Whisper 服务……） |
 
 ## 语音识别的四种方式
@@ -113,9 +113,22 @@ Tyto 是仓鸮属的拉丁名——仓鸮在黑暗里只靠听声音就能定位
 | 方式 | 服务商 | 特点 |
 |---|---|---|
 | Apple 本机 | — | 免费、不联网。一路只认一种语言，不区分说话人 |
-| 实时识别服务 | Soniox、Deepgram | 边说边出字，分得出说话人，最适合开会 |
+| 实时识别服务 | Soniox、AssemblyAI、ElevenLabs、Deepgram | 边说边出字，最适合开会；除 ElevenLabs 外都分得出说话人 |
 | 语音转写接口 | OpenAI、Groq、硅基流动、自建 Whisper | 停顿 0.7 秒算一句，一句一句上传，比实时慢一两秒 |
 | 让模型听写 | OpenRouter、Gemini 等能听音频的模型 | 同上；多种语言混着说也行 |
+
+### 对比几家实时识别
+
+`--compare-speech` 把同一段录音按真实速度同时送给几家，写一份报告：错误率（总的、中文字、英文词）、说话人分得对不对、开口到出字多久、一句说完到定稿多久、每小时多少钱。
+
+```sh
+echo "$SONIOX_KEY" | Tyto --set-key soniox        # key 存进钥匙串；assemblyai、elevenlabs 一样
+scripts/speech-sample.py /tmp/sample               # 可选：合成一段四个人的会议录音和参考稿
+Tyto --compare-speech /tmp/sample/meeting.wav --reference /tmp/sample/meeting.txt \
+     --providers soniox,assemblyai,elevenlabs,apple:en-US --out /tmp/compare
+```
+
+参考稿是这段录音的正确文字，每行一句；每行写成「说话人: 文字」才会比说话人。「服务商:模型」可以指定模型（如 `assemblyai:universal-3-5-pro`）；`apple:en-US` 把免费的本机识别也加进来当基准。合成的录音只能看个大概，用一段真实会议录音更准。
 
 外放开会时，麦克风会收到对方的声音。打开「去掉回声」后，本地出现的、和远端同时说出且大部分词相同的那句会被去掉；你复述对方的话来回答不受影响。
 
@@ -196,6 +209,8 @@ swift scripts/make-icon.swift owl icon.png && scripts/build-icon.sh icon.png   #
 | `--selftest-models <服务商 id>` | 读服务商的模型列表 |
 | `--selftest-settings` | 读出现在的设置（只看不写） |
 | `--selftest-echo` / `--selftest-deepgram` | 去回声规则、Deepgram 消息解析 |
+| `--selftest-streaming` | AssemblyAI、ElevenLabs 消息解析；`--compare-speech` 的算分 |
+| `--compare-speech <音频> [--reference 参考稿] [--providers 列表] [--hints en,zh] [--out 文件夹]` | 几家实时识别听同一段录音，见「对比几家实时识别」 |
 | `--render-preview <文件夹>` / `--render-settings <文件夹>` | 把悬浮窗、设置窗口画成图片（不截屏） |
 | `--selftest-glass <文件夹> [--light] [--auto]` | 真实玻璃效果（只截 Tyto 自己的窗口）；`--light` 盖在白底页面上，`--auto` 按自动字色画 |
 | `--selftest-backdrop` | 字色自动：量白底页面和会议画面的亮度，看选白字还是黑字 |
@@ -210,7 +225,7 @@ swift scripts/make-icon.swift owl icon.png && scripts/build-icon.sh icon.png   #
 Sources/Tyto/
   App/        启动、菜单、程序坞、全局快捷键、自动更新（Sparkle）、移到「应用程序」、开机自动打开
   Audio/      系统声音（Core Audio 进程音频捕获）、麦克风、重采样
-  Speech/     识别：Apple SpeechAnalyzer、Soniox、Deepgram、按停顿切句上传
+  Speech/     识别：Apple SpeechAnalyzer、Soniox、AssemblyAI、ElevenLabs、Deepgram、按停顿切句上传
   Translate/  Apple 本机翻译、大模型翻译
   Screenshot/ 截前台 App / 整屏 / 框选、本机 OCR
   LLM/        Claude / OpenAI 兼容 / Ollama 客户端、模型列表、提示词
@@ -225,7 +240,7 @@ Sources/ShareCheck/   共享屏幕验证程序
 
 - 远端录的是除 Tyto 以外所有 App 的声音，开会时别放音乐和视频。
 - 悬浮窗里的下拉菜单是系统画的，共享屏幕时弹出的那一下可能被看到。
-- Soniox、Deepgram 按官方协议实现，还没在真实会议里长时间跑过。
+- Soniox、AssemblyAI、ElevenLabs、Deepgram 按官方协议实现，对着本地模拟服务测过，还没在真实会议里长时间跑过。
 - Google Meet 在 Chrome 里共享时的隐藏效果还没实测（Chrome 走的也是 ScreenCaptureKit，同一条路径已经测过）。
 
 ## 许可证

@@ -13,6 +13,13 @@ enum ProviderKind: String, Codable, Sendable {
     case soniox
     /// Deepgram 实时语音识别（WebSocket）
     case deepgram
+    /// AssemblyAI 实时语音识别（WebSocket）
+    case assemblyai
+    /// ElevenLabs 实时语音识别（WebSocket）
+    case elevenlabs
+
+    /// 实时语音识别服务（不能用来对话）
+    var isStreamingSpeech: Bool { [.soniox, .deepgram, .assemblyai, .elevenlabs].contains(self) }
 }
 
 /// 一个配置好的服务商。key 存在钥匙串里（账户名 provider.<id>）。
@@ -163,6 +170,18 @@ struct ProviderTemplate: Identifiable, Sendable {
             colors: [Color(red: 0.20, green: 0.85, blue: 0.70), Color(red: 0.08, green: 0.60, blue: 0.55)],
             note: tr("实时语音识别，延迟低，分得出说话人；中文用 nova-2", "Real-time speech recognition, low latency, speaker labels; use nova-2 for Chinese"), capabilities: [.streamingSpeech],
             keyPage: "https://console.deepgram.com/", suggested: [.streamingSpeech: ["nova-3", "nova-2"]]),
+        ProviderTemplate(
+            id: "assemblyai", name: "AssemblyAI", kind: .assemblyai, baseURL: "wss://streaming.assemblyai.com/v3/ws", symbol: "waveform.and.person.filled",
+            colors: [Color(red: 0.36, green: 0.42, blue: 1.0), Color(red: 0.20, green: 0.24, blue: 0.85)],
+            note: tr("实时语音识别，分得出说话人，32 种语言、中英混说；约 $0.57/小时（含分说话人）", "Real-time speech recognition with speaker labels, 32 languages including mixed Chinese/English; about $0.57/hour with speaker labels"),
+            capabilities: [.streamingSpeech], keyPage: "https://www.assemblyai.com/dashboard/api-keys",
+            suggested: [.streamingSpeech: ["universal-3-6-pro", "universal-3-5-pro"]]),
+        ProviderTemplate(
+            id: "elevenlabs", name: "ElevenLabs", kind: .elevenlabs, baseURL: "wss://api.elevenlabs.io/v1/speech-to-text/realtime", symbol: "waveform.circle.fill",
+            colors: [Color(red: 0.32, green: 0.32, blue: 0.36), Color(red: 0.08, green: 0.08, blue: 0.10)],
+            note: tr("实时语音识别，英文很准，90 多种语言；实时版不分说话人，中英混说弱；约 $0.39/小时", "Real-time speech recognition, very accurate in English, 90+ languages; the real-time model has no speaker labels and is weak on mixed Chinese/English; about $0.39/hour"),
+            capabilities: [.streamingSpeech], keyPage: "https://elevenlabs.io/app/settings/api-keys",
+            suggested: [.streamingSpeech: ["scribe_v2_realtime"]]),
         custom,
     ] }
 }
@@ -178,7 +197,7 @@ struct ModelSlot: Codable, Equatable, Sendable {
 /// 语音识别的方式
 enum SpeechMethod: String, Codable, CaseIterable, Identifiable, Sendable {
     case apple
-    /// Soniox / Deepgram 这类实时识别
+    /// Soniox / AssemblyAI / ElevenLabs / Deepgram 这类实时识别
     case streaming
     /// OpenAI 兼容的转写接口：按停顿切成一句一句上传（OpenAI、Groq、硅基流动、自建 Whisper……）
     case transcription
@@ -197,7 +216,7 @@ enum SpeechMethod: String, Codable, CaseIterable, Identifiable, Sendable {
     var detail: String {
         switch self {
         case .apple: tr("免费、不联网。一路只认一种语言，不区分说话人。", "Free and offline. One language per channel; no speaker labels.")
-        case .streaming: tr("Soniox、Deepgram：边说边出字，分得出说话人，最适合开会。", "Soniox, Deepgram: text appears as people speak, with speaker labels. Best for meetings.")
+        case .streaming: tr("Soniox、AssemblyAI、ElevenLabs、Deepgram：边说边出字，最适合开会。", "Soniox, AssemblyAI, ElevenLabs, Deepgram: text appears as people speak. Best for meetings.")
         case .transcription: tr("OpenAI、Groq、硅基流动或自建 Whisper：说完一句传一句，比实时慢一两秒。", "OpenAI, Groq, SiliconFlow or a self-hosted Whisper: each sentence is uploaded after it ends, so it runs a second or two behind real time.")
         case .audioModel: tr("OpenRouter、Gemini 等能听音频的模型：说完一句传一句，多语言混说也行。", "Audio-capable models such as OpenRouter or Gemini: each sentence is uploaded after it ends; mixed languages are fine.")
         }
