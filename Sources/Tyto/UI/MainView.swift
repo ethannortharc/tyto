@@ -49,7 +49,7 @@ struct MainView: View {
     @ViewBuilder
     private func pageView(_ current: SettingsPage) -> some View {
         switch current {
-        case .session: SessionPage(session: session, skills: skills, page: $page)
+        case .session: SessionPage(session: session, settings: settings, skills: skills, page: $page)
         case .skills: SkillsPage(skills: skills)
         case .listen: ListenPage(settings: settings)
         case .translation: TranslationPage(settings: settings, session: session)
@@ -266,6 +266,7 @@ private struct StatusPill: View {
 
 private struct SessionPage: View {
     @ObservedObject var session: SessionModel
+    @ObservedObject var settings: SettingsStore
     @ObservedObject var skills: SkillStore
     @Binding var page: SettingsPage?
 
@@ -345,6 +346,25 @@ private struct SessionPage: View {
                 }
             } header: {
                 Text(tr("说话人", "Speakers"))
+            }
+
+            Section {
+                Row(symbol: "text.bubble", tint: .blue, title: tr("解释用的语言", "Explain In"),
+                    detail: tr("回复里说明「对方的意思」用的语言；留空跟界面语言一致", "Language for \"what they mean\"; empty follows the interface")) {
+                    TextField("", text: $settings.value.explainLanguage, prompt: Text(tr("跟界面语言一致", "Same as interface")))
+                        .frame(maxWidth: 200)
+                }
+                Row(symbol: "quote.bubble", tint: .blue, title: tr("回复用的语言", "Reply In"),
+                    detail: tr("建议回复用的语言；留空跟对方说话的语言一致", "Language of the suggested reply; empty matches the other side")) {
+                    TextField("", text: $settings.value.replyLanguage, prompt: Text(tr("跟对方一致", "Same as theirs")))
+                        .frame(maxWidth: 200)
+                }
+                Row(symbol: "questionmark.bubble", tint: .orange, title: tr("对方提问时自动回复", "Auto-Reply to Questions"),
+                    detail: tr("远端说完一句问句，自动生成回复建议", "Draft a reply automatically when the remote side asks a question")) {
+                    Toggle("", isOn: $settings.value.autoReplyOnQuestion).labelsHidden()
+                }
+            } header: {
+                Text(tr("回复", "Replies"))
             }
 
             Section {

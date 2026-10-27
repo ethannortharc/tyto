@@ -8,15 +8,22 @@ struct ReplyPrompt {
     init(settings: AppSettings, title: String, context: String, skills: [Skill],
          rows: [Utterance], targets: Set<UUID>, label: (Utterance) -> String) {
         let replyLanguage: String
+        /// 回复用的语言叫什么（判断要不要"对照"那一段）
+        let replyLanguageName: String?
         if settings.replyLanguage.trimmingCharacters(in: .whitespaces).isEmpty {
             let spoken = rows.filter { targets.contains($0.id) }
                 .compactMap { $0.language ?? Languages.detect($0.text) }
                 .first
             replyLanguage = spoken.map { "对方说话的语言（\(Languages.name($0))）" } ?? "对方说话的语言"
+            replyLanguageName = spoken.map(Languages.name)
         } else {
             replyLanguage = settings.replyLanguage
+            replyLanguageName = settings.replyLanguage
         }
-        let explain = settings.explainLanguage
+        let explain = settings.explainLanguage.trimmingCharacters(in: .whitespaces).isEmpty
+            ? tr("中文", "English") : settings.explainLanguage
+        // 回复本来就是解释用的语言（比如英文界面回英文），"对照"那段就是重复，不要
+        let wantsTranslation = replyLanguageName.map { $0.caseInsensitiveCompare(explain) != .orderedSame } ?? true
 
         let background = context.trimmingCharacters(in: .whitespacesAndNewlines)
         var system = """
@@ -38,10 +45,9 @@ struct ReplyPrompt {
 
 
         ## 输出格式
-        简短，能直接照着说。严格按下面三段输出，每段以【标题】开头，不要别的开场白：
-        【对方的意思】用\(explain)一两句话说清对方在问什么、要什么。
-        【建议回复】用\(replyLanguage)写可以直接说出口的回复，口语化，2～4 句，不加引号。
-        【\(explain)对照】上面这段回复的意思。
+        简短，能直接照着说。严格按下面\(wantsTranslation ? "三" : "两")段输出，每段以【标题】开头，标题一字不改，不要别的开场白：
+        【\(tr("对方的意思", "What they mean"))】用\(explain)一两句话说清对方在问什么、要什么。
+        【\(tr("建议回复", "Suggested reply"))】用\(replyLanguage)写可以直接说出口的回复，口语化，2～4 句，不加引号。\(wantsTranslation ? "\n【\(tr("\(explain)对照", "In \(explain)"))】上面这段回复的意思。" : "")
         如果信息不够、或者对方的话识别得不完整，"建议回复"就写一个得体的追问。
         """
         self.system = system
@@ -86,18 +92,19 @@ struct ScreenshotPrompt {
             system += "\n\n## 回复时要遵循的技能\n"
             for skill in skills { system += "\n### \(skill.name)\n\(skill.body)\n" }
         }
-        let explain = settings.explainLanguage
+        let explain = settings.explainLanguage.trimmingCharacters(in: .whitespaces).isEmpty
+            ? tr("中文", "English") : settings.explainLanguage
         let language = settings.replyLanguage.trimmingCharacters(in: .whitespaces).isEmpty
             ? "对方使用的语言" : settings.replyLanguage
         system += """
 
 
         ## 输出格式
-        严格按下面的格式，每段以【标题】开头，不要别的开场白：
-        【场景】用\(explain)一句话：这是哪里的什么对话，对方是谁，要我做什么。
-        【回复 1 · 推荐】最合适的回复，可以直接粘贴发送。
-        【回复 2 · 取向】换一种取向，标题里写明取向（比如：更简短、追问细节）。
-        【回复 3 · 取向】再换一种（比如：婉拒、推迟、需要先确认）。
+        严格按下面的格式，每段以【标题】开头，标题用下面的写法，不要别的开场白：
+        【\(tr("场景", "Scene"))】用\(explain)一句话：这是哪里的什么对话，对方是谁，要我做什么。
+        【\(tr("回复 1 · 推荐", "Reply 1 · Recommended"))】最合适的回复，可以直接粘贴发送。
+        【\(tr("回复 2 · 取向", "Reply 2 · approach"))】换一种取向，把标题里的"\(tr("取向", "approach"))"换成用\(explain)写的具体取向（比如：更简短、追问细节）。
+        【\(tr("回复 3 · 取向", "Reply 3 · approach"))】再换一种（比如：婉拒、推迟、需要先确认），标题同上。
         回复用\(language)。聊天回复口语、简短；邮件回复要有称呼和落款，落款写"[我的名字]"。回复正文不加引号、不加解释。
         """
         self.system = system

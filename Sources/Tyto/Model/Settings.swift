@@ -48,8 +48,8 @@ struct AppSettings: Codable, Equatable {
     var targetLanguage = "zh-Hans"
 
     // 回复
-    /// 回复里解释对方意思用的语言
-    var explainLanguage = "中文"
+    /// 回复里解释对方意思用的语言；空表示跟界面语言一致
+    var explainLanguage = ""
     /// 建议回复用的语言；空表示跟对方说话的语言一致
     var replyLanguage = ""
     /// 对方说完一句问话时自动生成回复
@@ -152,6 +152,8 @@ final class SettingsStore: ObservableObject {
               var stored = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
         if stored["providers"] == nil { stored = migrate(stored) }
+        // 加界面语言之前就在用的人，界面一直是中文：保持中文，不因为系统是英文就突然换掉（新用户才跟随系统）
+        if stored["language"] == nil { stored["language"] = AppLanguage.zh.rawValue }
         guard let merged = try? JSONSerialization.data(withJSONObject: merge(defaults, stored)) else { return nil }
         return try? JSONDecoder().decode(AppSettings.self, from: merged)
     }

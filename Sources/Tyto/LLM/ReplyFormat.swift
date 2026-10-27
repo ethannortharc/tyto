@@ -7,7 +7,11 @@ struct ReplySection: Identifiable, Equatable {
     let body: String
 
     /// 可以直接说出口 / 粘贴发送的那几段
-    var isCopyable: Bool { title.hasPrefix("建议回复") || title.hasPrefix("回复") }
+    var isCopyable: Bool {
+        let lowered = title.lowercased()
+        return title.hasPrefix("建议回复") || title.hasPrefix("回复")
+            || lowered.hasPrefix("suggested reply") || lowered.hasPrefix("reply")
+    }
 }
 
 enum ReplyFormat {
@@ -31,7 +35,15 @@ enum ReplyFormat {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             sections.append(ReplySection(id: index + 1, title: title, body: body))
         }
-        return sections
+        // 模型有时不省略，而是写一句"（此段省略）""(omitted)"占位，这种段落不显示
+        return sections.filter { !isPlaceholder($0.body) }
+    }
+
+    private static func isPlaceholder(_ body: String) -> Bool {
+        guard body.count < 60 else { return false }
+        let lowered = body.lowercased()
+        return body.contains("省略") || lowered.contains("omitted") || lowered.contains("not applicable")
+            || body == "—" || body == "-" || lowered == "n/a"
     }
 
     /// 第一段可以复制的回复

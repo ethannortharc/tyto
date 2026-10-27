@@ -83,35 +83,55 @@ final class SkillStore: ObservableObject {
         for skill in Self.seeds { save(skill) }
     }
 
-    nonisolated static let seeds: [Skill] = [
-        Skill(id: "01-general", name: "通用会议回复",
-              description: "默认技能：简短、礼貌、推动会议往前走",
-              body: """
-              - 先直接回答对方的问题，再补一句理由或下一步。
-              - 口语化，句子短，适合当场说出口；不要书面腔、不要客套堆砌。
-              - 不确定的事不要替我承诺，用"我确认一下，会后回复你"这类说法。
-              - 对方提了要求或期限时，复述一遍关键点（谁、做什么、什么时候），避免误解。
-              """),
-        Skill(id: "02-clarify", name: "没听清时追问",
-              description: "识别结果不完整或意思含糊时，给出得体的追问",
-              body: """
-              - 如果对方的话在记录里不完整、有明显识别错误，或者有两种以上的理解，先给一句追问，而不是硬答。
-              - 追问要具体：指出没听清的是哪一部分（数字、名字、日期、范围），让对方只需补那一点。
-              - 常用说法：Sorry, could you repeat the part about …? / Just to make sure I understand, do you mean … or …?
-              """),
-        Skill(id: "03-technical", name: "技术讨论",
-              description: "讨论架构、接口、故障、排期等技术话题时用",
-              body: """
-              - 用准确的技术词，不要含糊其辞；提到方案时说清取舍（性能、成本、风险、工期）。
-              - 对方问"能不能做"时，回答可行性 + 前提条件 + 大致工作量。
-              - 对方报故障时，先问影响范围和复现条件，再谈原因和修复。
-              """),
-        Skill(id: "04-business", name: "商务沟通",
-              description: "谈价格、合同、合作范围、交付时间时用",
-              body: """
-              - 语气友好但不让步过快；涉及价格、范围、期限的承诺，一律先说"需要内部确认"。
-              - 对方施压时，先确认对方的核心诉求，再给可选方案，而不是直接答应或拒绝。
-              - 会议结尾主动总结共识和待办，并约定下一次沟通的时间。
-              """),
-    ]
+    /// 第一次打开时放进技能文件夹的几个技能，按当时的界面语言写（之后就是用户自己的文件，不再跟着语言变）
+    nonisolated static var seeds: [Skill] {
+        [
+            Skill(id: "01-general", name: tr("通用会议回复", "General Meeting Reply"),
+                  description: tr("默认技能：简短、礼貌、推动会议往前走", "Default: short, polite, moves the meeting forward"),
+                  body: tr("""
+                  - 先直接回答对方的问题，再补一句理由或下一步。
+                  - 口语化，句子短，适合当场说出口；不要书面腔、不要客套堆砌。
+                  - 不确定的事不要替我承诺，用"我确认一下，会后回复你"这类说法。
+                  - 对方提了要求或期限时，复述一遍关键点（谁、做什么、什么时候），避免误解。
+                  """, """
+                  - Answer their question first, then add one reason or next step.
+                  - Conversational and short, easy to say on the spot; no stiff or padded phrasing.
+                  - Don't commit on my behalf when unsure; say something like "Let me check and get back to you after the meeting."
+                  - When they set a request or a deadline, restate the key points (who, what, by when) to avoid misunderstandings.
+                  """)),
+            Skill(id: "02-clarify", name: tr("没听清时追问", "Clarify When Unclear"),
+                  description: tr("识别结果不完整或意思含糊时，给出得体的追问", "When the transcript is incomplete or ambiguous, ask a good follow-up"),
+                  body: tr("""
+                  - 如果对方的话在记录里不完整、有明显识别错误，或者有两种以上的理解，先给一句追问，而不是硬答。
+                  - 追问要具体：指出没听清的是哪一部分（数字、名字、日期、范围），让对方只需补那一点。
+                  - 常用说法：Sorry, could you repeat the part about …? / Just to make sure I understand, do you mean … or …?
+                  """, """
+                  - If their words are cut off in the transcript, clearly misrecognized, or could mean two things, ask a follow-up instead of guessing.
+                  - Be specific about what was missed (a number, a name, a date, the scope) so they only need to fill in that part.
+                  - Useful phrases: "Sorry, could you repeat the part about …?" / "Just to make sure I understand, do you mean … or …?"
+                  """)),
+            Skill(id: "03-technical", name: tr("技术讨论", "Technical Discussion"),
+                  description: tr("讨论架构、接口、故障、排期等技术话题时用", "Architecture, APIs, incidents, schedules"),
+                  body: tr("""
+                  - 用准确的技术词，不要含糊其辞；提到方案时说清取舍（性能、成本、风险、工期）。
+                  - 对方问"能不能做"时，回答可行性 + 前提条件 + 大致工作量。
+                  - 对方报故障时，先问影响范围和复现条件，再谈原因和修复。
+                  """, """
+                  - Use precise technical terms; when proposing an approach, state the trade-offs (performance, cost, risk, timeline).
+                  - When asked whether something can be done, answer with feasibility, prerequisites and rough effort.
+                  - When they report an incident, ask about impact and how to reproduce it before discussing cause and fix.
+                  """)),
+            Skill(id: "04-business", name: tr("商务沟通", "Business Talks"),
+                  description: tr("谈价格、合同、合作范围、交付时间时用", "Pricing, contracts, scope, delivery dates"),
+                  body: tr("""
+                  - 语气友好但不让步过快；涉及价格、范围、期限的承诺，一律先说"需要内部确认"。
+                  - 对方施压时，先确认对方的核心诉求，再给可选方案，而不是直接答应或拒绝。
+                  - 会议结尾主动总结共识和待办，并约定下一次沟通的时间。
+                  """, """
+                  - Stay friendly but don't concede too fast; for any commitment on price, scope or deadlines, say you need to confirm internally first.
+                  - Under pressure, confirm their core need first, then offer options rather than agreeing or refusing outright.
+                  - At the end, summarize what was agreed and the action items, and set the next check-in.
+                  """)),
+        ]
+    }
 }

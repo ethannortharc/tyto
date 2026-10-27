@@ -32,6 +32,7 @@ enum SelfTest {
         // --settings-json '{...}'：这次自测用的设置盖在现有设置上，不写回
         var current = settings.value
         if let json = value(after: "--settings-json") { current = SettingsStore.overriding(current, with: json) }
+        L10n.set(current.language)
         // --set-key <服务商 id>：从标准输入读 key 存进钥匙串（由 Tyto 自己写，以后读的时候不弹授权框）
         if let id = value(after: "--set-key") {
             let key = readLine(strippingNewline: true) ?? ""
