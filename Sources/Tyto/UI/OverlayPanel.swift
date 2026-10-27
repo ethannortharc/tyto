@@ -22,7 +22,11 @@ final class OverlayPanel: NSPanel {
         becomesKeyOnlyIfNeeded = true
         sharingType = .none
         minSize = NSSize(width: 340, height: 280)
-        contentView = NSHostingView(rootView: rootView)
+        let host = NSHostingView(rootView: rootView)
+        // 窗口大小只由我们和你拖的边决定，不跟着内容走：回复区的高度又按窗口高度算，
+        // 让内容去撑窗口会互相推着长，实测撑到了 520×1041
+        host.sizingOptions = []
+        contentView = host
 
         guard remembersFrame else { return }
         if !setFrameUsingName(Self.autosaveName), let screen = NSScreen.main {
