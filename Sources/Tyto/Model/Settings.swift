@@ -77,8 +77,10 @@ struct AppSettings: Codable, Equatable {
     // 声音来源
     var captureRemote = true
     var captureLocal = true
-    /// 外放时麦克风会收到对方的声音，打开回声消除可以去掉
+    /// 外放开会时麦克风也会收到对方的声音：本地出现和远端几乎一样的一句时去掉它
     var echoCancellation = true
+    /// 本地用哪个麦克风（设备 UID）；空表示自动：系统默认，但避开 BlackHole 这类虚拟声卡
+    var localInputDeviceUID = ""
 
     // 翻译
     var translationEnabled = true

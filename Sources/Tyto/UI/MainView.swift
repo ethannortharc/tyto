@@ -169,6 +169,7 @@ private struct ModelsTab: View {
     @State private var sonioxKey = Keychain.get("soniox") ?? ""
     @State private var llmKey = ""
     @State private var testResult = ""
+    @State private var inputDevices: [InputDevice] = []
     @State private var testing = false
 
     var body: some View {
@@ -196,7 +197,14 @@ private struct ModelsTab: View {
             Section {
                 Toggle("远端：会议软件里的声音（录系统声音）", isOn: $settings.value.captureRemote)
                 Toggle("本地：麦克风（会议室里的人和你）", isOn: $settings.value.captureLocal)
-                Toggle("回声消除（用外放开会时打开，戴耳机可以关）", isOn: $settings.value.echoCancellation)
+                Picker("本地用的麦克风", selection: $settings.value.localInputDeviceUID) {
+                    Text("自动（系统默认，避开 BlackHole 这类虚拟声卡）").tag("")
+                    ForEach(inputDevices) { device in
+                        Text(device.isVirtual ? "\(device.name)（虚拟声卡）" : device.name).tag(device.uid)
+                    }
+                }
+                .onAppear { inputDevices = InputDevices.all() }
+                Toggle("去掉回声：本地收到的远端声音不重复显示（用外放开会时打开）", isOn: $settings.value.echoCancellation)
             } header: {
                 Text("声音来源")
             } footer: {

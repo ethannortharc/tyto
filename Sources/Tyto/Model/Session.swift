@@ -96,7 +96,7 @@ final class SessionModel: ObservableObject {
             RunLog.write("\(channel.label)：识别引擎已启动")
             let source: AudioSource = channel == .remote
                 ? SystemAudioCapture()
-                : MicrophoneCapture(echoCancellation: current.echoCancellation)
+                : MicrophoneCapture(deviceUID: current.localInputDeviceUID)
             let meter = meter
             let probe = AudioProbe(channel.label)
             source.onSamples = { samples in
@@ -117,7 +117,11 @@ final class SessionModel: ObservableObject {
             pipelines[channel] = Pipeline(source: source, engine: engine, consumer: consumer)
             startedAt[channel] = .now
             heard.remove(channel)
-            RunLog.write("\(channel.label)：开始录音")
+            if let microphone = source as? MicrophoneCapture {
+                RunLog.write("本地：开始录音，麦克风是「\(microphone.deviceName)」")
+            } else {
+                RunLog.write("\(channel.label)：开始录音")
+            }
             // 有一路开起来就算在听了
             if !isRunning {
                 isRunning = true
@@ -249,6 +253,11 @@ final class SessionModel: ObservableObject {
             rows.remove(at: index)
             return
         }
+        if channel == .local, settings.value.echoCancellation, isEcho(rows[index]) {
+            RunLog.write("本地：去掉回声「\(rows[index].text)」")
+            rows.remove(at: index)
+            return
+        }
         rows[index].isClosed = true
         RunLog.write("\(channel.label)：\(rows[index].text)")
         scheduleTranslation(id, after: .zero)
@@ -256,6 +265,45 @@ final class SessionModel: ObservableObject {
             reply(to: [id])
         }
         scheduleSave()
+    }
+
+    private func isEcho(_ row: Utterance) -> Bool {
+        Self.isEcho(row, remote: rows.filter { $0.channel == .remote })
+    }
+
+    /// 本地这一句是不是麦克风收到的远端声音（外放开会时）。两个条件都满足才算：
+    /// - 时间：本地这句是在远端某句说的过程中开始的（回声和原声同时发生；回话总在对方说完之后）；
+    /// - 内容：本地这句七成以上的词都出现在那几句远端的话里。
+    /// 只看内容会误删复述对方的回话，比如 "Yes, the second week of December works."
+    nonisolated static func isEcho(_ row: Utterance, remote: [Utterance]) -> Bool {
+        let words = words(row.text)
+        guard words.count >= 3 else { return false }
+        let overlapping = remote.filter {
+            row.startedAt >= $0.startedAt.addingTimeInterval(-2) && row.startedAt <= $0.updatedAt.addingTimeInterval(1)
+        }
+        guard !overlapping.isEmpty else { return false }
+        let remoteWords = Set(overlapping.flatMap { Self.words($0.displayText) })
+        let shared = words.filter(remoteWords.contains).count
+        return Double(shared) / Double(words.count) >= 0.7
+    }
+
+    /// 拆成词：英文按单词，中日韩按单字，忽略大小写和标点
+    nonisolated static func words(_ text: String) -> [String] {
+        var result: [String] = []
+        var current = ""
+        for scalar in text.lowercased().unicodeScalars {
+            if TextJoin.isCJK(scalar), CharacterSet.letters.contains(scalar) {
+                if !current.isEmpty { result.append(current); current = "" }
+                result.append(String(scalar))
+            } else if CharacterSet.alphanumerics.contains(scalar) {
+                current.unicodeScalars.append(scalar)
+            } else if !current.isEmpty {
+                result.append(current)
+                current = ""
+            }
+        }
+        if !current.isEmpty { result.append(current) }
+        return result
     }
 
     // MARK: - 翻译

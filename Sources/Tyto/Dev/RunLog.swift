@@ -42,7 +42,7 @@ final class AudioProbe: @unchecked Sendable {
             peak = max(peak, chunk.map(abs).max() ?? 0)
             guard samples >= nextReport else { return nil }
             defer {
-                nextReport = samples + Int(Resampler.outputRate) * 30
+                nextReport = samples + Int(Resampler.outputRate) * 5
                 peak = 0
             }
             return "\(name)：已收到 \(samples / Int(Resampler.outputRate)) 秒声音，最大音量 \(String(format: "%.3f", peak))"

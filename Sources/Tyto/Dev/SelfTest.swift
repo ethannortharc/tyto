@@ -7,6 +7,7 @@ import Foundation
 /// 命令行自测，不用开会也能检查识别、翻译、回复：
 ///   Tyto --selftest-speech <音频文件> [--locale en-US] [--target zh-Hans]   本机识别 + 本机翻译
 ///   Tyto --selftest-reply                                                  用设置里的大模型生成一条回复
+///   Tyto --selftest-echo                                                   去回声的判断（回声要去掉，复述要保留）
 ///   Tyto --render-preview <png>                                            用示例数据把悬浮窗画成图片（不碰屏幕）
 enum SelfTest {
     @MainActor
@@ -25,6 +26,9 @@ enum SelfTest {
         }
         if let path = value(after: "--render-preview") {
             exit(renderPreview(to: path, settings: settings))
+        }
+        if arguments.contains("--selftest-echo") {
+            exit(echo())
         }
         if arguments.contains("--selftest-reply") {
             let current = settings.value
@@ -87,6 +91,39 @@ enum SelfTest {
             return 2
         }
         return 0
+    }
+
+    static func echo() -> Int32 {
+        let base = Date.now
+        func row(_ channel: Channel, _ text: String, start: Double, end: Double) -> Utterance {
+            var row = Utterance(channel: channel, speaker: nil, language: "en")
+            row.text = text
+            row = Utterance(copying: row, startedAt: base.addingTimeInterval(start), updatedAt: base.addingTimeInterval(end))
+            return row
+        }
+        let question = row(.remote, "Could we move the launch to the second week of December?", start: 0, end: 4)
+        let cases: [(String, Utterance, Bool)] = [
+            ("外放回声（同时发生、内容相同）",
+             row(.local, "Could we move the launch to the second week of December", start: 0.4, end: 4.2), true),
+            ("回声识别得不完整", row(.local, "move the launch to the second week of", start: 1.0, end: 3.8), true),
+            ("说完之后复述着回话", row(.local, "Yes, the second week of December works.", start: 5.5, end: 7.5), false),
+            ("对方说话时插话，内容不同", row(.local, "Sorry, which launch do you mean?", start: 2.0, end: 3.5), false),
+            ("太短的应答", row(.local, "December?", start: 1.0, end: 1.5), false),
+            ("中文回声", row(.local, "我们能把发布推迟到十二月第二周吗", start: 0.3, end: 3.0), false),
+        ]
+        var failed = 0
+        for (name, local, expected) in cases {
+            let remote = name == "中文回声"
+                ? [row(.remote, "我们能把发布推迟到十二月第二周吗？", start: 0, end: 3)]
+                : [question]
+            let expectedHere = name == "中文回声" ? true : expected
+            let actual = SessionModel.isEcho(local, remote: remote)
+            let ok = actual == expectedHere
+            if !ok { failed += 1 }
+            print("\(ok ? "✓" : "✗") \(name)：\(actual ? "当成回声去掉" : "保留")")
+        }
+        print(failed == 0 ? "全部通过" : "\(failed) 个不对")
+        return failed == 0 ? 0 : 1
     }
 
     static func reply(_ settings: AppSettings) async -> Int32 {

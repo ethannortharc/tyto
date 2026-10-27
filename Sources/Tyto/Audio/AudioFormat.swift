@@ -10,6 +10,7 @@ protocol AudioSource: AnyObject, Sendable {
 
 enum TytoError: LocalizedError {
     case noMicrophone
+    case microphoneDevice(String, OSStatus)
     case noOutputDevice
     case tapFailed(String)
     case unsupportedLocale(String)
@@ -21,6 +22,7 @@ enum TytoError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noMicrophone: "找不到麦克风"
+        case .microphoneDevice(let name, let status): "用不了麦克风「\(name)」（\(status)）"
         case .noOutputDevice: "找不到声音输出设备"
         case .tapFailed(let detail): "录不了系统声音：\(detail)"
         case .unsupportedLocale(let locale): "本机识别不支持这个语言：\(locale)"

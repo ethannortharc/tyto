@@ -40,6 +40,20 @@ struct Utterance: Identifiable, Codable, Equatable {
         isClosed = false
     }
 
+    /// 只给自测用：复制一行并改开始、更新时间
+    init(copying row: Utterance, startedAt: Date, updatedAt: Date) {
+        id = row.id
+        channel = row.channel
+        speaker = row.speaker
+        text = row.text
+        pending = row.pending
+        translation = row.translation
+        language = row.language
+        isClosed = row.isClosed
+        self.startedAt = startedAt
+        self.updatedAt = updatedAt
+    }
+
     var displayText: String { TextJoin.join(text, pending) }
 
     /// 说话人名字表里用的键，如 "remote:1"、"local:-"
