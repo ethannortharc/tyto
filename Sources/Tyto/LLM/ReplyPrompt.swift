@@ -70,7 +70,9 @@ struct ScreenshotPrompt {
     let system: String
     let user: String
 
-    init(settings: AppSettings, context: String, skills: [Skill], ocr: String, imageAttached: Bool, instruction: String?) {
+    /// - source: 截图来自哪个 App，如 "Microsoft Teams"
+    init(settings: AppSettings, context: String, skills: [Skill], source: String?, ocr: String, imageAttached: Bool,
+         instruction: String?) {
         var system = """
         你是我的回复助手，只有我能看到你的输出。我截了一张屏幕，通常是 Teams、Slack、飞书、微信里的聊天，或者一封邮件。
         你要看懂：这是哪里的什么对话、谁在跟我说话、最新一条需要我回应的是什么；然后写好可以直接粘贴发送的回复。
@@ -100,14 +102,37 @@ struct ScreenshotPrompt {
         """
         self.system = system
 
-        var user = imageAttached ? "截图在上面。" : "（没有发图片，只有本机 OCR 识别出的文字。）"
+        var user = imageAttached ? "截图在上面。" : "（没有发图片，只有识别出的文字。）"
+        if let source { user += "\n截图来自：\(source)。" }
         if !ocr.isEmpty {
-            user += "\n\n截图里识别出的文字（本机 OCR，[左]/[右] 表示在截图的左半边还是右半边，用来核对人名、数字）：\n\(ocr)"
+            user += "\n\n截图里识别出的文字（[左]/[右] 表示在截图的左半边还是右半边，用来核对人名、数字）：\n\(ocr)"
         }
         if let instruction, !instruction.trimmingCharacters(in: .whitespaces).isEmpty {
             user += "\n\n我的要求：\(instruction)"
         }
         user += "\n\n请按格式给出回复。"
         self.user = user
+    }
+}
+
+/// "先用看图模型读图"时，让看图模型把截图整理成文字（不写回复）。
+struct VisionPrompt {
+    let system: String
+    let user: String
+
+    init(model: String, source: String?) {
+        // DeepSeek-OCR 这类专门转文字的模型对提示很敏感，用它自己的固定说法
+        if model.lowercased().contains("ocr") {
+            system = ""
+            user = "Free OCR."
+            return
+        }
+        system = "你把屏幕截图整理成文字，交给另一个助手去写回复。只整理看到的内容，不要回复，不要编造，看不清的写「?」。"
+        user = """
+        \(source.map { "截图来自 \($0)。\n" } ?? "")按下面的格式整理：
+        应用和页面：哪个 App、什么页面（聊天、群聊、邮件……）
+        内容：按时间顺序，每条一行「发送人（时间）：内容」。我发的（通常在右边）发送人写「我」。邮件写出发件人、收件人、主题和正文。
+        其他：附件、引用的消息、表情回应等要点。
+        """
     }
 }

@@ -27,8 +27,11 @@ enum LLMFactory {
             guard let key else { throw TytoError.missingAPIKey("Anthropic") }
             return AnthropicClient(baseURL: baseURL, apiKey: key, model: model, effort: effort)
         case .openAICompatible:
-            // 本机的 Ollama、LM Studio 不用 key
+            // 本机的 LM Studio 之类不用 key
             return OpenAICompatibleClient(baseURL: baseURL, apiKey: key, model: model, effort: effort)
+        case .ollama:
+            // Ollama 也提供 OpenAI 兼容接口（/v1/chat/completions），本机不用 key
+            return OpenAICompatibleClient(baseURL: baseURL, apiKey: nil, model: model, effort: "")
         }
     }
 }
@@ -54,9 +57,9 @@ struct AnthropicClient: LLMClient {
             "model": model,
             "max_tokens": maxTokens,
             "stream": true,
-            "system": system,
             "messages": [["role": "user", "content": Self.content(user, images: images)]],
         ]
+        if !system.isEmpty { body["system"] = system }
         if !effort.isEmpty { body["output_config"] = ["effort": effort] }
         if Self.fallbackModels.contains(model), baseURL.host() == "api.anthropic.com" {
             body["fallbacks"] = "default"
@@ -108,13 +111,13 @@ struct OpenAICompatibleClient: LLMClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         if let apiKey { request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization") }
+        var messages: [[String: Any]] = []
+        if !system.isEmpty { messages.append(["role": "system", "content": system]) }
+        messages.append(["role": "user", "content": Self.content(user, images: images)])
         var body: [String: Any] = [
             "model": model,
             "stream": true,
-            "messages": [
-                ["role": "system", "content": system],
-                ["role": "user", "content": Self.content(user, images: images)],
-            ],
+            "messages": messages,
         ]
         // 只有 OpenAI 自己认 reasoning_effort，别家可能报错
         if !effort.isEmpty, baseURL.host()?.hasSuffix("openai.com") == true { body["reasoning_effort"] = effort }
@@ -196,9 +199,9 @@ enum SSE {
 
 extension LLMClient {
     /// 不需要流式时，把结果拼成一段
-    func complete(system: String, user: String, maxTokens: Int) async throws -> String {
+    func complete(system: String, user: String, images: [Data] = [], maxTokens: Int) async throws -> String {
         var output = ""
-        for try await chunk in stream(system: system, user: user, images: [], maxTokens: maxTokens) { output += chunk }
+        for try await chunk in stream(system: system, user: user, images: images, maxTokens: maxTokens) { output += chunk }
         return output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

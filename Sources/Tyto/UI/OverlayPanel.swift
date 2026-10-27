@@ -6,7 +6,8 @@ import SwiftUI
 final class OverlayPanel: NSPanel {
     private static let autosaveName = "TytoOverlay"
 
-    init<Content: View>(rootView: Content) {
+    /// - remembersFrame: false 时不读也不存窗口位置（测试用，不覆盖你拖好的位置）
+    init<Content: View>(rootView: Content, remembersFrame: Bool = true) {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 600),
             styleMask: [.borderless, .nonactivatingPanel, .resizable],
@@ -23,6 +24,7 @@ final class OverlayPanel: NSPanel {
         minSize = NSSize(width: 360, height: 260)
         contentView = NSHostingView(rootView: rootView)
 
+        guard remembersFrame else { return }
         if !setFrameUsingName(Self.autosaveName), let area = NSScreen.main?.visibleFrame {
             setFrame(NSRect(x: area.maxX - 500, y: area.minY + 40, width: 480, height: min(600, area.height - 80)),
                      display: false)

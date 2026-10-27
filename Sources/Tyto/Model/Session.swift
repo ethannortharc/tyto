@@ -448,31 +448,40 @@ final class SessionModel: ObservableObject {
     // MARK: - 截屏回复
 
     /// 截图原图（重新生成时用），只放在内存里
-    private var screenshotImages: [UUID: Data] = [:]
+    private var screenshotImages: [UUID: CapturedImage] = [:]
 
-    /// 框选一块屏幕，生成回复
-    func captureAndReply() {
+    /// 截图并生成回复。target 为 nil 时用设置里的默认方式（最前面的 App / 整个屏幕 / 框选）。
+    func captureAndReply(_ target: AppSettings.CaptureTarget? = nil) {
+        let target = target ?? settings.value.captureTarget
         Task {
-            guard let png = await Screenshot.captureInteractive() else { return }
-            replyToScreenshot(png)
+            do {
+                guard let image = try await Capture.capture(target) else { return }
+                RunLog.write("截屏回复：截了\(target.title)\(image.source.map { "，来自 \($0)" } ?? "")")
+                replyToScreenshot(image)
+            } catch {
+                notice = error.localizedDescription
+                RunLog.write("截屏回复：\(error.localizedDescription)")
+            }
         }
     }
 
     /// 用剪贴板里的图片生成回复
     func replyToClipboardImage() {
         guard let png = Screenshot.clipboardImage() else {
-            notice = "剪贴板里没有图片。可以用 ⌘⌃⇧4 截一块屏幕到剪贴板，或者直接按 ⌃⌥S 框选。"
+            notice = "剪贴板里没有图片。可以用 ⌘⌃⇧4 截一块屏幕到剪贴板，或者直接按 ⌃⌥S。"
             return
         }
-        replyToScreenshot(png)
+        replyToScreenshot(CapturedImage(png: png, appName: nil, bundleID: nil, windowTitle: nil))
     }
 
-    /// 看懂截图里的聊天或邮件，生成几个能直接粘贴的回复；第一个自动放进剪贴板
-    func replyToScreenshot(_ png: Data, instruction: String? = nil) {
+    /// 读懂截图里的聊天或邮件，生成几个能直接粘贴的回复；第一个自动放进剪贴板
+    func replyToScreenshot(_ image: CapturedImage, instruction: String? = nil) {
         let current = settings.value
         let client: LLMClient
+        let visionClient: LLMClient?
         do {
             client = try LLMFactory.make(current.llm)
+            visionClient = current.screenshotMode == .visionModel ? try LLMFactory.make(current.vision) : nil
         } catch {
             notice = error.localizedDescription
             return
@@ -482,35 +491,29 @@ final class SessionModel: ObservableObject {
             replies[previous].isStreaming = false
             replies[previous].error = "被新的回复打断"
         }
-        var reply = Reply(target: "截图")
+        var reply = Reply(target: image.appName.map { "截图 · \($0)" } ?? "截图")
         reply.source = "screenshot"
-        reply.thumbnail = Screenshot.thumbnail(png)
+        reply.thumbnail = Screenshot.thumbnail(image.png)
         reply.instruction = instruction
-        reply.status = "识别截图里的文字…"
+        reply.status = "本机 OCR 识别文字…"
         replies.append(reply)
         let replyID = reply.id
-        screenshotImages[replyID] = png
+        screenshotImages[replyID] = image
         let skills = skills.skills.filter { activeSkillIDs.contains($0.id) }
         let context = context
 
         replyTask = Task { [weak self] in
-            let started = Date.now
-            let lines = await Screenshot.recognizeText(png)
-            RunLog.write("截屏回复：OCR \(lines.count) 行，\(Int(Date.now.timeIntervalSince(started) * 1000)) ms")
-            let withImage = current.screenshotMode == .imageAndText
-            let prompt = ScreenshotPrompt(settings: current, context: context, skills: skills,
-                                          ocr: Screenshot.layoutText(lines), imageAttached: withImage,
-                                          instruction: instruction)
-            self?.updateReply(replyID) { $0.status = "生成回复…" }
             do {
-                let images = withImage ? [Screenshot.forModel(png)] : []
-                for try await chunk in client.stream(system: prompt.system, user: prompt.user, images: images,
-                                                     maxTokens: 16_000) {
-                    self?.updateReply(replyID) {
-                        $0.text += chunk
-                        $0.status = nil
-                    }
-                }
+                try await ScreenshotReplier.run(
+                    image, settings: current, context: context, skills: skills, instruction: instruction,
+                    reply: client, vision: visionClient,
+                    status: { status in self?.updateReply(replyID) { $0.status = status } },
+                    text: { chunk in
+                        self?.updateReply(replyID) {
+                            $0.text += chunk
+                            $0.status = nil
+                        }
+                    })
                 self?.finishScreenshotReply(replyID, copyFirst: current.copyFirstScreenshotReply)
             } catch {
                 let message = error is CancellationError ? "已停止" : error.localizedDescription
@@ -526,11 +529,11 @@ final class SessionModel: ObservableObject {
 
     /// 带着新的要求（比如"婉拒""用中文"）对同一张截图重新生成
     func regenerateScreenshotReply(_ id: UUID, instruction: String) {
-        guard let png = screenshotImages[id] else {
+        guard let image = screenshotImages[id] else {
             notice = "原图已经不在了（重启过 Tyto），请重新截一次"
             return
         }
-        replyToScreenshot(png, instruction: instruction)
+        replyToScreenshot(image, instruction: instruction)
     }
 
     func canRegenerate(_ id: UUID) -> Bool { screenshotImages[id] != nil }
@@ -710,5 +713,37 @@ enum Clipboard {
     static func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+/// 截屏回复的整条流程：本机 OCR →（可选）看图模型整理 → 回复模型写回复。app 和自测共用。
+@MainActor
+enum ScreenshotReplier {
+    static func run(_ image: CapturedImage, settings current: AppSettings, context: String, skills: [Skill],
+                    instruction: String?, reply client: LLMClient, vision visionClient: LLMClient?,
+                    status: (String) -> Void, text: (String) -> Void) async throws {
+        let started = Date.now
+        let lines = await Screenshot.recognizeText(image.png)
+        RunLog.write("截屏回复：OCR \(lines.count) 行，\(Int(Date.now.timeIntervalSince(started) * 1000)) ms")
+        var ocr = Screenshot.layoutText(lines)
+
+        // 先用看图模型把截图整理成文字（看图模型是本机的，图片就不出这台 Mac）
+        if let visionClient {
+            status("看图模型读截图（\(current.vision.model)）…")
+            let prompt = VisionPrompt(model: current.vision.model, source: image.source)
+            let reading = try await visionClient.complete(system: prompt.system, user: prompt.user,
+                                                          images: [Screenshot.forModel(image.png)], maxTokens: 4_000)
+            ocr = "看图模型整理的内容：\n\(reading)\n\n本机 OCR 的原文（核对用）：\n\(ocr)"
+        }
+
+        let withImage = current.screenshotMode == .imageAndText
+        let prompt = ScreenshotPrompt(settings: current, context: context, skills: skills, source: image.source,
+                                      ocr: ocr, imageAttached: withImage, instruction: instruction)
+        status("生成回复…")
+        for try await chunk in client.stream(system: prompt.system, user: prompt.user,
+                                             images: withImage ? [Screenshot.forModel(image.png)] : [],
+                                             maxTokens: 16_000) {
+            text(chunk)
+        }
     }
 }

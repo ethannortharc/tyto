@@ -103,11 +103,12 @@ struct GlassBackground: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         ZStack {
-            if flat {
-                shape.fill(theme.tint.opacity(opacity))
-            } else {
-                Color.clear.glassEffect(.regular.tint(theme.tint.opacity(opacity)), in: shape)
+            if !flat {
+                // 系统玻璃几乎不理会染色的透明度，所以玻璃本身不染色，深浅靠上面单独一层底色。
+                // 拉到最左时换成更清透的玻璃，磨砂感更少。
+                Color.clear.glassEffect(opacity < 0.05 ? .clear : .regular, in: shape)
             }
+            shape.fill(theme.tint.opacity(opacity))
             shape.fill(LinearGradient(colors: [theme.accent.opacity(0.08), .clear], startPoint: .top, endPoint: .center))
             shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.24), .white.opacity(0.05)],
                                               startPoint: .top, endPoint: .bottom), lineWidth: 1)

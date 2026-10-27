@@ -7,25 +7,51 @@ struct LLMConfig: Codable, Equatable, Sendable {
     enum Provider: String, Codable, CaseIterable, Identifiable, Sendable {
         case anthropic
         case openAICompatible
+        case ollama
 
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .anthropic: "Anthropic（Claude）"
-            case .openAICompatible: "OpenAI 兼容接口（OpenAI、DeepSeek、通义、Gemini、Ollama…）"
+            case .anthropic: "Anthropic"
+            case .openAICompatible: "OpenAI 兼容"
+            case .ollama: "Ollama 本机"
+            }
+        }
+        var detail: String {
+            switch self {
+            case .anthropic: "Claude 系列"
+            case .openAICompatible: "OpenAI、Gemini、DeepSeek、通义、OpenRouter、LM Studio…"
+            case .ollama: "在这台 Mac 上跑开源模型，数据不出本机"
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .anthropic: "sparkle"
+            case .openAICompatible: "network"
+            case .ollama: "desktopcomputer"
             }
         }
         var defaultBaseURL: String {
             switch self {
             case .anthropic: "https://api.anthropic.com"
             case .openAICompatible: "https://api.openai.com/v1"
+            case .ollama: "http://127.0.0.1:11434/v1"
             }
         }
+        var defaultModel: String {
+            switch self {
+            case .anthropic: "claude-opus-5-5"
+            case .openAICompatible: "gpt-5.5"
+            case .ollama: "qwen3-vl:4b-instruct"
+            }
+        }
+        var needsKey: Bool { self != .ollama }
         /// 钥匙串里存 API key 用的名字
         var keychainAccount: String {
             switch self {
             case .anthropic: "anthropic"
             case .openAICompatible: "openai-compatible"
+            case .ollama: "ollama"
             }
         }
     }
@@ -99,25 +125,74 @@ struct AppSettings: Codable, Equatable {
     var autoReplyOnQuestion = false
 
     // 截屏回复
+    /// 截屏后怎么读懂截图
     enum ScreenshotMode: String, Codable, CaseIterable, Identifiable {
+        /// 图片和本机 OCR 文字一起交给回复模型（要能看图）
         case imageAndText
+        /// 先让"看图模型"把截图整理成文字，再交给回复模型（看图模型可以是本机的，图片不出本机）
+        case visionModel
+        /// 只用本机 OCR 文字
         case textOnly
 
         var id: String { rawValue }
-        var label: String {
+        var title: String {
             switch self {
-            case .imageAndText: "图片 + 本机 OCR 文字一起给模型（看得懂版面，推荐）"
-            case .textOnly: "只给本机 OCR 文字（图片不出本机）"
+            case .imageAndText: "图片直接给回复模型"
+            case .visionModel: "先用看图模型读图"
+            case .textOnly: "只用本机 OCR"
+            }
+        }
+        var detail: String {
+            switch self {
+            case .imageAndText: "回复模型自己看截图，再配上本机 OCR 的文字核对人名数字。最准，图片会发给模型服务。"
+            case .visionModel: "看图模型先把截图整理成文字，回复模型只看文字。看图模型选本机的，图片就不出这台 Mac。"
+            case .textOnly: "系统自带的文字识别，免下载、不联网、0.3 秒。看不到版面，谁发的只能按左右位置猜。"
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .imageAndText: "photo.on.rectangle.angled"
+            case .visionModel: "eye"
+            case .textOnly: "text.viewfinder"
             }
         }
     }
     var screenshotMode: ScreenshotMode = .imageAndText
+
+    /// 截屏回复默认截哪里
+    enum CaptureTarget: String, Codable, CaseIterable, Identifiable {
+        case frontWindow
+        case screen
+        case region
+
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .frontWindow: "最前面的 App"
+            case .screen: "整个屏幕"
+            case .region: "框选"
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .frontWindow: "macwindow"
+            case .screen: "display"
+            case .region: "rectangle.dashed"
+            }
+        }
+    }
+    var captureTarget: CaptureTarget = .frontWindow
+
+    /// 看图用的模型（识别方式选"先用看图模型读图"时用）
+    var vision = LLMConfig(provider: .ollama, baseURL: LLMConfig.Provider.ollama.defaultBaseURL,
+                           model: LLMConfig.Provider.ollama.defaultModel, effort: "")
     /// 截屏回复生成好后，把第一个回复放进剪贴板
     var copyFirstScreenshotReply = true
 
     // 悬浮窗
     var theme: ThemeID = .obsidian
-    var overlayOpacity = 0.62
+    /// 底色浓度：0 是只有玻璃（最透明），越大越深
+    var overlayOpacity = 0.45
     var fontSize = 14.0
 }
 
@@ -143,6 +218,16 @@ final class SettingsStore: ObservableObject {
               let merged = try? JSONSerialization.data(withJSONObject: merge(defaults, stored))
         else { return nil }
         return try? JSONDecoder().decode(AppSettings.self, from: merged)
+    }
+
+    /// 在一份设置上盖一段 JSON（自测用：不写进真实设置）
+    static func overriding(_ settings: AppSettings, with json: String) -> AppSettings {
+        guard let base = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as? [String: Any],
+              let top = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+              let merged = try? JSONSerialization.data(withJSONObject: merge(base, top)),
+              let result = try? JSONDecoder().decode(AppSettings.self, from: merged)
+        else { return settings }
+        return result
     }
 
     private static func merge(_ base: [String: Any], _ top: [String: Any]) -> [String: Any] {

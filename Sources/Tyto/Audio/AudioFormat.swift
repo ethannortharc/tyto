@@ -18,6 +18,7 @@ enum TytoError: LocalizedError {
     case missingAPIKey(String)
     case translationNotInstalled(String)
     case server(String)
+    case screenRecordingPermission
 
     var errorDescription: String? {
         switch self {
@@ -30,6 +31,8 @@ enum TytoError: LocalizedError {
         case .missingAPIKey(let what): "还没填 \(what) 的 API key（模型与服务 里填）"
         case .translationNotInstalled(let pair): "本机翻译语言没下载：\(pair)（模型与服务 → 下载本机翻译语言）"
         case .server(let message): message
+        case .screenRecordingPermission:
+            "截屏要「屏幕录制」权限：系统设置 → 隐私与安全性 → 录屏与系统录音 → 打开 Tyto，然后重开 Tyto。用剪贴板里的图片回复不需要这个权限。"
         }
     }
 }

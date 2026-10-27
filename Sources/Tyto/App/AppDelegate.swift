@@ -64,10 +64,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func openMainWindow() {
         if mainWindow == nil {
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 720, height: 700),
+                contentRect: NSRect(x: 0, y: 0, width: 900, height: 680),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered, defer: false)
-            window.title = "Tyto 听译 · 会话与设置"
+            window.title = "Tyto 听译"
+            window.titlebarAppearsTransparent = true
+            window.toolbarStyle = .unified
             window.isReleasedWhenClosed = false
             // 会议背景和记录也不能被共享出去
             window.sharingType = .none
@@ -112,7 +114,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(menuItem(session.isRunning ? "停止听（⌃⌥L）" : "开始听（⌃⌥L）", #selector(toggleListening)))
         menu.addItem(menuItem(overlay?.isVisible == true ? "隐藏悬浮窗（⌃⌥T）" : "显示悬浮窗（⌃⌥T）", #selector(toggleOverlayAction)))
         menu.addItem(menuItem("回复（⌃⌥R）", #selector(replyAction)))
-        menu.addItem(menuItem("截屏回复（⌃⌥S）", #selector(screenshotAction)))
+        menu.addItem(menuItem("截屏回复：\(settings.value.captureTarget.title)（⌃⌥S）", #selector(screenshotAction)))
+        menu.addItem(menuItem("截屏回复：框选（⌃⌥A）", #selector(regionAction)))
         menu.addItem(menuItem("用剪贴板里的图片回复", #selector(clipboardImageAction)))
         let translation = menuItem("翻译", #selector(toggleTranslation))
         translation.state = settings.value.translationEnabled ? .on : .off
@@ -137,6 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleOverlayAction() { toggleOverlay() }
     @objc private func replyAction() { reply() }
     @objc private func screenshotAction() { screenshotReply() }
+    @objc private func regionAction() { screenshotReply(.region) }
     @objc private func clipboardImageAction() {
         session.replyToClipboardImage()
         if overlay?.isVisible == false { overlay?.orderFrontRegardless() }
@@ -153,8 +157,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.orderFrontStandardAboutPanel(nil)
     }
 
-    private func screenshotReply() {
-        session.captureAndReply()
+    private func screenshotReply(_ target: AppSettings.CaptureTarget? = nil) {
+        session.captureAndReply(target)
         if overlay?.isVisible == false { overlay?.orderFrontRegardless() }
     }
 
@@ -172,6 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotKeys.register(keyCode: kVK_ANSI_P, modifiers: modifiers) { [weak self] in self?.overlayState.clickThrough.toggle() }
         hotKeys.register(keyCode: kVK_ANSI_L, modifiers: modifiers) { [weak self] in self?.session.toggle() }
         hotKeys.register(keyCode: kVK_ANSI_S, modifiers: modifiers) { [weak self] in self?.screenshotReply() }
+        hotKeys.register(keyCode: kVK_ANSI_A, modifiers: modifiers) { [weak self] in self?.screenshotReply(.region) }
         hotKeys.register(keyCode: kVK_ANSI_Q, modifiers: modifiers) { NSApp.terminate(nil) }
     }
 }

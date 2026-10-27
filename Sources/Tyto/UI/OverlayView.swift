@@ -18,6 +18,7 @@ struct OverlayView: View {
 
     @State private var shownReplyID: UUID?
     @State private var replyCollapsed = false
+    @State private var showAppearance = false
 
     private var theme: OverlayTheme { OverlayTheme.of(settings.value.theme) }
 
@@ -33,6 +34,8 @@ struct OverlayView: View {
         }
         .font(.system(size: settings.value.fontSize))
         .foregroundStyle(.white)
+        // 底色调得很淡时，文字加一圈细阴影，盖在亮的画面上也看得清
+        .shadow(color: .black.opacity(max(0, 0.55 - settings.value.overlayOpacity) * 1.4), radius: 1.2, y: 0.5)
         .background(GlassBackground(theme: theme, opacity: settings.value.overlayOpacity, flat: flatForPreview))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .environment(\.colorScheme, .dark)
@@ -62,8 +65,12 @@ struct OverlayView: View {
                 settings.value.translationEnabled.toggle()
                 session.translationToggled()
             }
-            IconButton(symbol: "camera.viewfinder", accent: theme.accent, help: "截屏回复：框选一块屏幕（⌃⌥S）") {
-                session.captureAndReply()
+            captureMenu
+            IconButton(symbol: "paintpalette", active: showAppearance, accent: theme.accent, help: "外观：主题、透明度、字号") {
+                showAppearance.toggle()
+            }
+            .popover(isPresented: $showAppearance, arrowEdge: .bottom) {
+                AppearancePopover(settings: settings, ui: ui)
             }
             moreMenu
             IconButton(symbol: "xmark", accent: theme.accent, help: "退出 Tyto（⌃⌥Q）", action: actions.quit)
@@ -74,24 +81,43 @@ struct OverlayView: View {
         .gesture(WindowDragGesture())
     }
 
+    /// 点一下按设置的方式截图；旁边的小箭头可以选别的方式
+    private var captureMenu: some View {
+        Menu {
+            ForEach(AppSettings.CaptureTarget.allCases) { target in
+                Button { session.captureAndReply(target) } label: {
+                    Label(target == .region ? "框选（⌃⌥A）" : target.title, systemImage: target.symbol)
+                }
+            }
+            Divider()
+            Button(action: session.replyToClipboardImage) {
+                Label("用剪贴板里的图片", systemImage: "doc.on.clipboard")
+            }
+        } label: {
+            Image(systemName: "camera.viewfinder")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.7))
+        } primaryAction: {
+            session.captureAndReply()
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.visible)
+        .fixedSize()
+        .help("截屏回复：\(settings.value.captureTarget.title)（⌃⌥S），小箭头选别的方式")
+    }
+
     private var moreMenu: some View {
         Menu {
-            Button("会话与设置…", action: actions.openMain)
-            Button("用剪贴板里的图片回复", action: session.replyToClipboardImage)
-            Divider()
-            Picker("主题", selection: $settings.value.theme) {
-                ForEach(ThemeID.allCases) { Text($0.label).tag($0) }
+            Button(action: actions.openMain) { Label("会话与设置…", systemImage: "gearshape") }
+            Button { ui.clickThrough.toggle() } label: {
+                Label(ui.clickThrough ? "关闭点击穿透（⌃⌥P）" : "点击穿透（⌃⌥P）", systemImage: "cursorarrow.motionlines")
             }
-            Button("字大一点") { settings.value.fontSize = min(24, settings.value.fontSize + 1) }
-            Button("字小一点") { settings.value.fontSize = max(11, settings.value.fontSize - 1) }
-            Button("背景深一点") { settings.value.overlayOpacity = min(0.95, settings.value.overlayOpacity + 0.08) }
-            Button("背景浅一点") { settings.value.overlayOpacity = max(0.2, settings.value.overlayOpacity - 0.08) }
-            Button(ui.clickThrough ? "关闭点击穿透（⌃⌥P）" : "点击穿透（⌃⌥P）") { ui.clickThrough.toggle() }
             Divider()
-            Button("隐藏悬浮窗（⌃⌥T）", action: actions.hide)
-            Button("退出 Tyto（⌃⌥Q）", action: actions.quit)
+            Button(action: actions.hide) { Label("隐藏悬浮窗（⌃⌥T）", systemImage: "eye.slash") }
+            Button(action: actions.quit) { Label("退出 Tyto（⌃⌥Q）", systemImage: "power") }
         } label: {
-            Image(systemName: "slider.horizontal.3")
+            Image(systemName: "ellipsis.circle")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.white.opacity(0.7))
                 .frame(width: 28, height: 28)
@@ -146,9 +172,11 @@ struct OverlayView: View {
                         showTranslation: settings.value.translationEnabled,
                         selected: session.selection.contains(row.id),
                         fontSize: settings.value.fontSize)
+                    .transition(.opacity.combined(with: .offset(y: 8)))
             }
         }
         .padding(.vertical, 8)
+        .animation(.easeOut(duration: 0.22), value: rows.count)
     }
 
     /// 同一个人连着说（间隔一分钟内）只在第一句显示名字
@@ -654,5 +682,59 @@ private struct ReplyCard: View {
                 session.regenerateScreenshotReply(reply.id, instruction: instruction)
             }
         }
+    }
+}
+
+/// 悬浮窗里的外观小面板：主题、透明度、字号、点击穿透
+private struct AppearancePopover: View {
+    @ObservedObject var settings: SettingsStore
+    @ObservedObject var ui: OverlayState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("外观").font(.system(size: 13, weight: .semibold))
+            HStack(spacing: 10) {
+                ForEach(ThemeID.allCases) { id in
+                    let theme = OverlayTheme.of(id)
+                    Button { settings.value.theme = id } label: {
+                        VStack(spacing: 5) {
+                            Circle()
+                                .fill(LinearGradient(colors: [theme.accent, theme.accentEnd], startPoint: .topLeading,
+                                                     endPoint: .bottomTrailing))
+                                .frame(width: 26, height: 26)
+                                .overlay(Circle().strokeBorder(theme.tint, lineWidth: 5).opacity(0.9))
+                                .overlay(Circle().strokeBorder(settings.value.theme == id ? Color.white : .clear, lineWidth: 2)
+                                    .padding(-3))
+                            Text(id.label.components(separatedBy: "：").first ?? "").font(.system(size: 10.5))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Label("底色浓度", systemImage: "circle.lefthalf.filled").font(.system(size: 11.5))
+                    Spacer()
+                    Text("\(Int(settings.value.overlayOpacity * 100))%").font(.system(size: 11).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                Slider(value: $settings.value.overlayOpacity, in: 0...0.95)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Label("字号", systemImage: "textformat.size").font(.system(size: 11.5))
+                    Spacer()
+                    Text("\(Int(settings.value.fontSize))").font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+                }
+                Slider(value: $settings.value.fontSize, in: 11...24, step: 1)
+            }
+            Toggle(isOn: $ui.clickThrough) {
+                Label("点击穿透（⌃⌥P）", systemImage: "cursorarrow.motionlines").font(.system(size: 11.5))
+            }
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+        }
+        .padding(14)
+        .frame(width: 250)
     }
 }

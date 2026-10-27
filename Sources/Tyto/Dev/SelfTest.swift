@@ -1,5 +1,6 @@
 @preconcurrency import AVFAudio
 import ImageIO
+import ScreenCaptureKit
 import SwiftUI
 import UniformTypeIdentifiers
 import Foundation
@@ -9,6 +10,11 @@ import Foundation
 ///   Tyto --selftest-reply                                                  用设置里的大模型生成一条回复
 ///   Tyto --selftest-echo                                                   去回声的判断（回声要去掉，复述要保留）
 ///   Tyto --selftest-screenshot <图片> [--instruction 要求]                   截屏回复：本机 OCR + 大模型
+///   Tyto --selftest-capture <frontWindow|screen> [--out 文件]                截图并认出是哪个 App
+///   Tyto --selftest-providers <地址>                                      读模型列表、Ollama 检测和下载（对着模拟服务）
+///   以上自测都可以加 --settings-json '{...}'，临时改设置，不写回
+///   Tyto --selftest-glass <文件夹>                                         真实玻璃效果：悬浮窗盖在模拟会议画面上，只截这两个窗口
+///   Tyto --render-settings <文件夹>                                        把设置窗口每一页画成图片（窗口建在屏幕外，不截屏）
 ///   Tyto --render-preview <文件夹>                                         用示例数据把悬浮窗画成图片（不碰屏幕）
 enum SelfTest {
     @MainActor
@@ -19,6 +25,17 @@ enum SelfTest {
             return arguments[index + 1]
         }
         setvbuf(stdout, nil, _IOLBF, 0)
+        // --settings-json '{...}'：这次自测用的设置盖在现有设置上，不写回
+        var current = settings.value
+        if let json = value(after: "--settings-json") { current = SettingsStore.overriding(current, with: json) }
+        if let target = value(after: "--selftest-capture") {
+            Task { exit(await capture(target, to: value(after: "--out"))) }
+            return true
+        }
+        if let host = value(after: "--selftest-providers") {
+            Task { exit(await providers(host: host)) }
+            return true
+        }
         if let file = value(after: "--selftest-speech") {
             let locale = value(after: "--locale") ?? "en-US"
             let target = value(after: "--target") ?? "zh-Hans"
@@ -27,9 +44,16 @@ enum SelfTest {
         }
         if let file = value(after: "--selftest-screenshot") {
             let instruction = value(after: "--instruction")
-            let current = settings.value
-            Task { exit(await screenshot(file: file, instruction: instruction, settings: current)) }
+            let appName = value(after: "--app")
+            Task { exit(await screenshot(file: file, instruction: instruction, appName: appName, settings: current)) }
             return true
+        }
+        if let path = value(after: "--selftest-glass") {
+            Task { exit(await glass(to: path)) }
+            return true
+        }
+        if let path = value(after: "--render-settings") {
+            exit(renderSettings(to: path))
         }
         if let path = value(after: "--render-preview") {
             exit(renderPreview(to: path, settings: SettingsStore(persists: false)))
@@ -38,7 +62,6 @@ enum SelfTest {
             exit(echo())
         }
         if arguments.contains("--selftest-reply") {
-            let current = settings.value
             Task { exit(await reply(current)) }
             return true
         }
@@ -171,39 +194,12 @@ enum SelfTest {
     /// 用示例数据把悬浮窗画成 PNG，检查排版（不截屏）。每个主题一张会议字幕，再加一张截屏回复。
     @MainActor
     static func renderPreview(to folder: String, settings: SettingsStore) -> Int32 {
-        let session = SessionModel(settings: settings, skills: SkillStore(), persists: false)
-        func row(_ channel: Channel, _ speaker: Int?, _ text: String, _ translation: String?, pending: String = "",
-                 at minute: Int, _ second: Int) -> Utterance {
-            var row = Utterance(channel: channel, speaker: speaker, language: "en")
-            row.text = text
-            row.pending = pending
-            row.translation = translation
-            row.isClosed = pending.isEmpty
-            let time = Calendar.current.date(bySettingHour: 10, minute: minute, second: second, of: .now) ?? .now
-            return Utterance(copying: row, startedAt: time, updatedAt: time.addingTimeInterval(4))
-        }
-        let rows = [
-            row(.remote, 1, "Thanks for joining, Sarah. We reviewed the Northwind proposal last week.",
-                "谢谢参加，Sarah。我们上周看过了 Northwind 的方案。", at: 2, 5),
-            row(.remote, 1, "The budget looks fine at $120,000 for Q4.", "第四季度 12 万美元的预算看起来没问题。", at: 2, 12),
-            row(.local, 1, "Great, happy to walk through the timeline.", "好的，我很乐意过一遍时间安排。", at: 2, 20),
-            row(.remote, 2, "Could we move the launch to the second week of December, or is that too tight for your team?",
-                "我们能把上线推到十二月第二周吗？还是对你们团队来说太紧了？", at: 2, 31),
-            row(.remote, 2, "Also, what's the status of the", nil, pending: "billing integration", at: 2, 44),
-        ]
-        var meetingReply = Reply(target: "选中的 1 句")
-        meetingReply.text = """
-        【对方的意思】问能不能把上线推到 12 月第二周，以及这个时间对我们是否太紧。
-        【建议回复】The second week of December works for us. We'd just need the final specs by November 20th to stay on track.
-        【中文对照】12 月第二周可以。我们需要在 11 月 20 日前拿到最终需求，才能按期完成。
-        """
-        meetingReply.isStreaming = false
+        let session = SampleData.session(settings: settings)
+        let rows = SampleData.rows()
+        let meetingReply = SampleData.meetingReply()
 
         let folderURL = URL(filePath: folder)
         try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
-        session.speakerNames["local:1"] = "我"
-        session.keywords = "launch, budget"
-
         for theme in ThemeID.allCases {
             settings.value.theme = theme
             settings.value.overlayOpacity = AppSettings().overlayOpacity
@@ -213,26 +209,165 @@ enum SelfTest {
         }
 
         settings.value.theme = .obsidian
-        var shot = Reply(target: "截图")
-        shot.source = "screenshot"
-        shot.thumbnail = sampleThumbnail()
-        shot.copiedSection = "回复 1 · 推荐"
-        shot.isStreaming = false
-        shot.text = """
-        【场景】Teams 里 David 问你周五前能不能把评审意见发给他，他要在周一的会上用。
-        【回复 1 · 推荐】Hi David, yes — I'll send the review notes by Thursday EOD so you have time to go through them before Monday.
-        【回复 2 · 追问细节】Sure. Do you need comments on the whole deck, or just the pricing section?
-        【回复 3 · 推迟】Friday is tight on my side. Would Monday morning still work for your meeting?
-        """
+        let shot = SampleData.screenshotReply(thumbnail: sampleThumbnail())
         session.showSample(rows: [], replies: [shot], selection: [])
         return render(session: session, settings: settings, to: folderURL.appending(path: "screenshot-reply.png")) ? 0 : 1
+    }
+
+    /// 截图并认出来源 App（只打印大小和 App 名字）
+    static func capture(_ target: String, to out: String?) async -> Int32 {
+        guard let target = AppSettings.CaptureTarget(rawValue: target) else {
+            print("截图方式：frontWindow / screen / region")
+            return 1
+        }
+        do {
+            guard let image = try await Capture.capture(target) else {
+                print("取消了")
+                return 1
+            }
+            let size = Screenshot.cgImage(image.png).map { "\($0.width)x\($0.height)" } ?? "?"
+            print("截了：\(target.title)，\(size)，来自 \(image.appName ?? "?")（\(image.bundleID ?? "?")）")
+            if let out { try image.png.write(to: URL(filePath: out)) }
+            return 0
+        } catch {
+            print("出错：\(error.localizedDescription)")
+            return 1
+        }
+    }
+
+    /// 对着一个地址（模拟服务）测：三家服务商读模型列表、Ollama 检测、下载进度
+    static func providers(host: String) async -> Int32 {
+        guard let url = URL(string: host) else { return 1 }
+        var failed = 0
+        for (provider, base) in [(LLMConfig.Provider.anthropic, host), (.openAICompatible, "\(host)/v1"), (.ollama, "\(host)/v1")] {
+            do {
+                let models = try await ModelList.fetch(LLMConfig(provider: provider, baseURL: base, model: "", effort: ""))
+                print("\(provider.label) 模型列表：\(models)")
+            } catch {
+                failed += 1
+                print("\(provider.label) 模型列表出错：\(error.localizedDescription)")
+            }
+        }
+        print("Ollama 版本：\(await Ollama.version(host: url) ?? "没检测到")")
+        do {
+            var last = ""
+            for try await progress in Ollama.pull("qwen3-vl:4b-instruct", host: url) {
+                let percent = progress.fraction.map { " \(Int($0 * 100))%" } ?? ""
+                let line = "\(progress.status)\(percent)"
+                if line != last { print("下载：\(line)") }
+                last = line
+            }
+        } catch {
+            failed += 1
+            print("下载出错：\(error.localizedDescription)")
+        }
+        return failed == 0 ? 0 : 1
+    }
+
+    /// 看真实的玻璃效果（ImageRenderer 和图层渲染都画不出系统玻璃）：
+    /// 屏幕上放一个模拟会议画面的窗口，悬浮窗盖在上面，只截这两个窗口（屏幕上别的东西不会进图）。
+    /// 要屏幕录制权限：从有权限的终端里运行。
+    @MainActor
+    static func glass(to folder: String) async -> Int32 {
+        let settings = SettingsStore(persists: false)
+        let session = SampleData.session(settings: settings)
+        guard let screen = NSScreen.screens.first else { return 1 }
+        let area = screen.visibleFrame
+        let stage = NSRect(x: area.midX - 320, y: area.midY - 380, width: 640, height: 760)
+        let backdrop = NSWindow(contentRect: stage, styleMask: [.borderless], backing: .buffered, defer: false)
+        backdrop.level = .floating
+        backdrop.contentView = NSHostingView(rootView: SampleBackdrop())
+        backdrop.orderFrontRegardless()
+        let panel = OverlayPanel(rootView: OverlayView(session: session, settings: settings, ui: OverlayState()),
+                                 remembersFrame: false)
+        panel.sharingType = .readOnly
+        panel.setFrame(NSRect(x: stage.minX + 80, y: stage.minY + 80, width: 480, height: 600), display: true)
+        panel.orderFrontRegardless()
+        defer {
+            panel.orderOut(nil)
+            backdrop.orderOut(nil)
+        }
+        let folderURL = URL(filePath: folder)
+        try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        let displayID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+        for opacity in [0.0, 0.25, 0.5, 0.8] {
+            settings.value.overlayOpacity = opacity
+            try? await Task.sleep(for: .seconds(1.2))
+            do {
+                let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+                let ours = content.windows.filter {
+                    [backdrop.windowNumber, panel.windowNumber].contains(Int($0.windowID))
+                }
+                guard let display = content.displays.first(where: { $0.displayID == displayID }) else { return 1 }
+                let filter = SCContentFilter(display: display, including: ours)
+                let config = SCStreamConfiguration()
+                config.sourceRect = CGRect(x: stage.minX - screen.frame.minX, y: screen.frame.maxY - stage.maxY,
+                                           width: stage.width, height: stage.height)
+                config.width = Int(stage.width * 2)
+                config.height = Int(stage.height * 2)
+                config.showsCursor = false
+                let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+                let url = folderURL.appending(path: "glass-\(settings.value.theme.rawValue)-\(Int(opacity * 100)).png")
+                try ImageFile.writePNG(image, to: url)
+                print(url.path)
+            } catch {
+                print("截不了：\(error.localizedDescription)")
+                return 1
+            }
+        }
+        return 0
+    }
+
+    /// 把设置窗口每一页画成图片：窗口建在屏幕外，画它的图层（系统控件也能画出来，不截屏）
+    @MainActor
+    static func renderSettings(to folder: String) -> Int32 {
+        let settings = SettingsStore(persists: false)
+        let session = SampleData.session(settings: settings)
+        let skills = SkillStore()
+        let folderURL = URL(filePath: folder)
+        try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        NSApp.setActivationPolicy(.accessory)
+        for page in SettingsPage.allCases {
+            let window = OffscreenWindow(contentRect: NSRect(x: -6000, y: -6000, width: 900, height: 680),
+                                         styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+                                         backing: .buffered, defer: false)
+            window.sharingType = .none
+            window.titlebarAppearsTransparent = true
+            window.appearance = NSAppearance(named: .darkAqua)
+            let host = NSHostingView(rootView: MainView(session: session, settings: settings, skills: skills, initialPage: page))
+            window.contentView = host
+            window.orderFrontRegardless()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.8))
+            host.layoutSubtreeIfNeeded()
+            guard let layer = host.layer else { continue }
+            let scale: CGFloat = 2
+            let size = host.bounds.size
+            guard let context = CGContext(data: nil, width: Int(size.width * scale), height: Int(size.height * scale),
+                                          bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { continue }
+            context.setFillColor(NSColor(white: 0.12, alpha: 1).cgColor)
+            context.fill(CGRect(x: 0, y: 0, width: size.width * scale, height: size.height * scale))
+            context.scaleBy(x: scale, y: scale)
+            if host.isFlipped {
+                context.translateBy(x: 0, y: size.height)
+                context.scaleBy(x: 1, y: -1)
+            }
+            layer.render(in: context)
+            window.orderOut(nil)
+            if let image = context.makeImage() {
+                let url = folderURL.appending(path: "settings-\(page.rawValue).png")
+                try? ImageFile.writePNG(image, to: url)
+                print(url.path)
+            }
+        }
+        return 0
     }
 
     /// 悬浮窗画在一张模拟的视频会议画面上，玻璃用"模糊后的背景 + 主题底色"近似
     @MainActor
     private static func render(session: SessionModel, settings: SettingsStore, to url: URL) -> Bool {
         let size = CGSize(width: 480, height: 600)
-        let backdrop = PreviewBackdrop()
+        let backdrop = SampleBackdrop()
         let view = ZStack {
             backdrop
             backdrop.blur(radius: 26)
@@ -278,33 +413,28 @@ enum SelfTest {
     /// 截屏回复自测：本机 OCR，再用设置里的大模型生成回复
     ///   Tyto --selftest-screenshot <图片> [--instruction "婉拒"]
     @MainActor
-    static func screenshot(file: String, instruction: String?, settings: AppSettings) async -> Int32 {
+    static func screenshot(file: String, instruction: String?, appName: String?, settings: AppSettings) async -> Int32 {
         guard let png = try? Data(contentsOf: URL(filePath: file)) else {
             print("读不了图片")
             return 1
         }
-        let started = Date.now
-        let lines = await Screenshot.recognizeText(png)
-        print("本机 OCR：\(lines.count) 行，\(Int(Date.now.timeIntervalSince(started) * 1000)) ms")
-        let layout = Screenshot.layoutText(lines)
-        print(layout)
         let client: LLMClient
+        let visionClient: LLMClient?
         do {
             client = try LLMFactory.make(settings.llm)
+            visionClient = settings.screenshotMode == .visionModel ? try LLMFactory.make(settings.vision) : nil
         } catch {
             print(error.localizedDescription)
             return 2
         }
-        let withImage = settings.screenshotMode == .imageAndText
-        let prompt = ScreenshotPrompt(settings: settings, context: "", skills: [], ocr: layout,
-                                      imageAttached: withImage, instruction: instruction)
-        print("\n大模型：\(settings.llm.model)，\(withImage ? "图片 + OCR 文字" : "只有 OCR 文字")")
+        print("识别方式：\(settings.screenshotMode.title)；回复模型：\(settings.llm.model)"
+              + (visionClient != nil ? "；看图模型：\(settings.vision.model)" : ""))
+        let image = CapturedImage(png: png, appName: appName, bundleID: nil, windowTitle: nil)
         var text = ""
         do {
-            for try await chunk in client.stream(system: prompt.system, user: prompt.user,
-                                                 images: withImage ? [Screenshot.forModel(png)] : [], maxTokens: 16_000) {
-                text += chunk
-            }
+            try await ScreenshotReplier.run(image, settings: settings, context: "", skills: [], instruction: instruction,
+                                            reply: client, vision: visionClient,
+                                            status: { print("· \($0)") }, text: { text += $0 })
         } catch {
             print("出错：\(error.localizedDescription)")
             return 1
@@ -317,19 +447,9 @@ enum SelfTest {
     }
 }
 
-/// 预览用的背景：模拟会议软件的视频画面
-private struct PreviewBackdrop: View {
-    var body: some View {
-        ZStack {
-            LinearGradient(colors: [Color(red: 0.16, green: 0.20, blue: 0.30), Color(red: 0.32, green: 0.26, blue: 0.24)],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
-            Circle().fill(Color(red: 0.95, green: 0.72, blue: 0.55)).frame(width: 220).offset(x: -120, y: -150)
-            Circle().fill(Color(red: 0.30, green: 0.55, blue: 0.85)).frame(width: 260).offset(x: 160, y: 120)
-            RoundedRectangle(cornerRadius: 30).fill(Color(red: 0.85, green: 0.85, blue: 0.88)).frame(width: 300, height: 140)
-                .offset(x: 40, y: -30)
-            Circle().fill(Color(red: 0.45, green: 0.75, blue: 0.55)).frame(width: 140).offset(x: -150, y: 220)
-        }
-    }
+/// 画图用的窗口：系统会把带标题栏的窗口挪回屏幕内，这里不让它挪，免得在屏幕上闪一下
+private final class OffscreenWindow: NSWindow {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
 enum ImageFile {
