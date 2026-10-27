@@ -30,6 +30,7 @@ A floating meeting assistant for macOS. It turns what people say into live capti
 - **Original and translation side by side**: pick your main language; lines in other languages get a smaller, fainter translation underneath, toggled with one click. Numbers, dates, amounts, names and your own keywords are highlighted; questions get a tag.
 - **One-click replies**: click a line, select several, or reply to "the latest". Replies use the meeting background and the skills you picked, in three parts: what they mean, what you can say, and a translation of your reply.
 - **Replies panel**: every reply stays in a column beside the overlay (⌃⌥B), newest first; delete any of them, and they are saved with the session. Under a meeting reply Tyto adds *What you said*: what the local speaker named "Me" said after that line and before the other side moved on, tagged *Followed*, *Rephrased* or *No reply*. Those captions get a small icon that jumps to the reply, and the exported notes include the comparison.
+- **Prompter**: notes you prepared before the meeting, in their own see-through window (⌃⌥N) that you can put anywhere, e.g. right under the camera. Markdown, HTML or plain text; edits to the file show up right away. The bar on top always shows which section you're in and opens the outline; ⌃⌥↑ / ⌃⌥↓ jump between sections. With *Follow* on, the notes scroll to and highlight the paragraph you're reading out. When the other side asks about something that has its own section, a hint shows up at the bottom and ⌃⌥J jumps there. Matching runs on your Mac and also uses the translation, so English speech finds Chinese notes.
 - **Screenshot replies**: ⌃⌥S captures the frontmost app (say, a Teams chat), works out who is asking what, and writes three replies you can paste; the first is already on your clipboard.
 - **Bring any model**: configure each provider once, then choose a model for replies, vision, translation and transcription. Supports Anthropic, OpenAI, OpenRouter, Gemini, DeepSeek, Tongyi Qwen, SiliconFlow, Groq, Soniox, Deepgram, local Ollama / LM Studio, and any OpenAI-compatible endpoint.
 - **Looks**: macOS 26 Liquid Glass with three palettes; background from fully clear to deep; adjustable font size.
@@ -73,6 +74,9 @@ They work while the meeting app is in front.
 | ⌃⌥A | Screenshot reply: select an area |
 | ⌃⌥T | Show / hide the overlay |
 | ⌃⌥B | Show / hide the replies panel |
+| ⌃⌥N | Show / hide the prompter |
+| ⌃⌥↑ / ⌃⌥↓ | Prompter: previous / next section (while it's open) |
+| ⌃⌥J | Prompter: go to the section they just mentioned |
 | ⌃⌥P | Click-through on / off (clicks go to the window below; hold ⌥ over the overlay to use it meanwhile) |
 | ⌃⌥Q | Quit |
 
@@ -150,7 +154,8 @@ Measured on an M4 Pro: 1.4 s for a chat screenshot, about 5 s for a dense mixed 
 |---|---|
 | Meeting audio | Nowhere with Apple on-device recognition; to your chosen service with cloud recognition |
 | Caption text | Nowhere with Apple translation; to your chosen model for replies and model translation |
-| What's behind the overlay | With *Auto* text color, every 2.5 s that area is scaled to 16×16 to get its average brightness, on your Mac only, never saved; not read when the text color is fixed |
+| Prompter notes | Only read on your Mac; Follow and hints match words locally |
+| What's behind the overlay and prompter | With *Auto* text color, every 2.5 s that area is scaled to 16×16 to get its average brightness, on your Mac only, never saved; not read when the text color is fixed |
 | Screenshots | Depends on the reading mode above; nowhere with a local model or OCR only |
 | Keys | Only in this Mac's keychain |
 | Transcripts | Only in `~/Library/Application Support/Tyto/sessions/` |
@@ -185,6 +190,7 @@ Check each part without a meeting (arguments to `build/Tyto.app/Contents/MacOS/T
 | `--selftest-glass <dir> [--light] [--auto]` | Real glass rendering (captures only Tyto's own windows); `--light` over a white page, `--auto` with the automatic text color |
 | `--selftest-backdrop` | Auto text color: measure a white page and a meeting backdrop, check white vs. black |
 | `--selftest-followup` | *What you said* after a suggested reply: which lines, followed / rephrased / no reply; which side the replies panel goes |
+| `--selftest-prompter [folder]` | Prompter in a real window: outline, Follow, hints (English and Chinese notes), other people's HTML colors, reload on edit; with a folder, screenshots too |
 
 Add `--settings-json '{...}'` to any of them to override settings without saving. The run log is at `~/Library/Logs/Tyto.log`.
 
@@ -199,6 +205,7 @@ Sources/Tyto/
   Screenshot/ frontmost app / screen / area capture, on-device OCR
   LLM/        Claude / OpenAI-compatible / Ollama clients, model lists, prompts
   Model/      session, settings (providers + uses), skills
+  Prompter/   prepared notes: Markdown → HTML, web view, Follow and hint matching
   UI/         overlay, themes, highlighting, settings window
   Dev/        self-tests, run log
 Sources/ShareCheck/   screen-share check app

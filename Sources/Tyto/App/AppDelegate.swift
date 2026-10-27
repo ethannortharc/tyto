@@ -12,6 +12,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var overlay: OverlayPanel?
     private var backdropProbe: BackdropProbe?
     private var sidecar: SidecarPanel?
+    private lazy var prompter = PrompterModel(settings: settings, session: session)
+    private var prompterPanel: PrompterPanel?
+    private var prompterProbe: BackdropProbe?
+    /// 提词器开着时才要的快捷键（上一节、下一节、跳到对方提到的那节）
+    private var prompterKeys: [UInt32] = []
     private var lastReplyCount = 0
     private var mainWindow: NSWindow?
     private var statusItem: NSStatusItem?
@@ -39,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         backdropProbe = BackdropProbe(panel: panel, settings: settings, state: overlayState)
         backdropProbe?.start()
         setupSidecar(beside: panel)
+        setupPrompter()
         overlayState.$clickThrough
             .sink { [weak self] _ in self?.updateClickThrough() }
             .store(in: &subscriptions)
@@ -152,6 +158,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         sidecar.place(beside: overlay)
     }
 
+    // MARK: - 提词器
+
+    private func setupPrompter() {
+        let panel = PrompterPanel(rootView: PrompterView(model: prompter, settings: settings,
+                                                         close: { [weak self] in self?.settings.value.showPrompter = false }))
+        prompterPanel = panel
+        prompterProbe = BackdropProbe(panel: panel, settings: settings, state: prompter)
+        prompterProbe?.start()
+        prompter.start()
+        settings.$value.map(\.showPrompter).removeDuplicates()
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.updatePrompter() } }
+            .store(in: &subscriptions)
+    }
+
+    private func updatePrompter() {
+        guard let panel = prompterPanel else { return }
+        if settings.value.showPrompter {
+            if !panel.hasSavedFrame, let overlay { panel.place(beside: overlay, sidecar: sidecar) }
+            panel.orderFrontRegardless()
+            if prompterKeys.isEmpty {
+                let modifiers = controlKey | optionKey
+                prompterKeys = [
+                    hotKeys.register(keyCode: kVK_UpArrow, modifiers: modifiers) { [weak self] in self?.prompter.step(-1) },
+                    hotKeys.register(keyCode: kVK_DownArrow, modifiers: modifiers) { [weak self] in self?.prompter.step(1) },
+                    hotKeys.register(keyCode: kVK_ANSI_J, modifiers: modifiers) { [weak self] in self?.prompter.jumpToSuggestion() },
+                ]
+            }
+        } else {
+            panel.orderOut(nil)
+            prompterKeys.forEach(hotKeys.unregister)
+            prompterKeys = []
+        }
+        updateClickThrough()
+    }
+
     /// 点击穿透时鼠标会穿过悬浮窗，悬浮窗本身就点不了。按住 ⌥ 并把鼠标移到悬浮窗上，临时恢复可点，松开又穿透。
     private func watchOptionKey() {
         optionTask = Task {
@@ -165,12 +206,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updateClickThrough() {
         guard let overlay else { return }
         let mouse = NSEvent.mouseLocation
-        let over = overlay.frame.contains(mouse) || (sidecar?.isVisible == true && sidecar?.frame.contains(mouse) == true)
+        let over = [overlay, sidecar, prompterPanel].contains { $0?.isVisible == true && $0?.frame.contains(mouse) == true }
         let peeking = overlayState.clickThrough && NSEvent.modifierFlags.contains(.option) && over
         if overlayState.peeking != peeking { overlayState.peeking = peeking }
         let ignores = overlayState.clickThrough && !peeking
         if overlay.ignoresMouseEvents != ignores { overlay.ignoresMouseEvents = ignores }
-        if let sidecar, sidecar.ignoresMouseEvents != ignores { sidecar.ignoresMouseEvents = ignores }
+        for panel in [sidecar, prompterPanel] as [NSPanel?] {
+            if let panel, panel.ignoresMouseEvents != ignores { panel.ignoresMouseEvents = ignores }
+        }
     }
 
     /// 弹出来的小窗口（改名字的气泡等）是另建的窗口，不会自动继承"不被共享"；定时把本 app 所有窗口都设上。
@@ -237,6 +280,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let replies = item(tr("回复面板", "Replies Panel"), "sidebar.left", #selector(toggleSidecarAction), key: "b")
         replies.state = current.showReplyPanel ? .on : .off
         menu.addItem(replies)
+        let prompterItem = item(tr("提词器", "Prompter"), "doc.text", #selector(togglePrompterAction), key: "n")
+        prompterItem.state = current.showPrompter ? .on : .off
+        menu.addItem(prompterItem)
         let clickThrough = item(tr("点击穿透", "Click-Through"), "cursorarrow.motionlines", #selector(toggleClickThrough), key: "p")
         clickThrough.state = overlayState.clickThrough ? .on : .off
         menu.addItem(clickThrough)
@@ -296,6 +342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     @objc private func toggleClickThrough() { overlayState.clickThrough.toggle() }
     @objc private func toggleSidecarAction() { settings.value.showReplyPanel.toggle() }
+    @objc private func togglePrompterAction() { settings.value.showPrompter.toggle() }
     @objc private func openMainAction() { openMainWindow() }
     @objc private func quit() { NSApp.terminate(nil) }
     @objc private func about() {
@@ -321,6 +368,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotKeys.register(keyCode: kVK_ANSI_R, modifiers: modifiers) { [weak self] in self?.reply() }
         hotKeys.register(keyCode: kVK_ANSI_P, modifiers: modifiers) { [weak self] in self?.overlayState.clickThrough.toggle() }
         hotKeys.register(keyCode: kVK_ANSI_B, modifiers: modifiers) { [weak self] in self?.settings.value.showReplyPanel.toggle() }
+        hotKeys.register(keyCode: kVK_ANSI_N, modifiers: modifiers) { [weak self] in self?.settings.value.showPrompter.toggle() }
         hotKeys.register(keyCode: kVK_ANSI_L, modifiers: modifiers) { [weak self] in self?.session.toggle() }
         hotKeys.register(keyCode: kVK_ANSI_S, modifiers: modifiers) { [weak self] in self?.screenshotReply() }
         hotKeys.register(keyCode: kVK_ANSI_A, modifiers: modifiers) { [weak self] in self?.screenshotReply(.region) }

@@ -133,6 +133,18 @@ struct AppSettings: Codable, Equatable {
     /// 底色浓度：0 是完全透明（连玻璃都没有），往右先出现玻璃，再加深底色
     var overlayOpacity = 0.45
     var fontSize = 14.0
+
+    // 提词器
+    var showPrompter = false
+    /// 正在看的材料（文件路径）；空表示没有
+    var prompterPath = ""
+    /// 最近用过的材料，最新的在前
+    var prompterRecent: [String] = []
+    var prompterFontSize = 17.0
+    /// 跟读：我照着稿子说时，滚到说到的那一段
+    var prompterFollow = true
+    /// 对方提到稿子里的某一节时提示跳过去
+    var prompterHints = true
 }
 
 @MainActor

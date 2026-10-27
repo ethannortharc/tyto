@@ -1,6 +1,15 @@
 import AppKit
 import ScreenCaptureKit
 
+/// 记着"后面的画面亮不亮"的那个对象（悬浮窗、提词器各一个）
+@MainActor
+protocol BackdropState: AnyObject {
+    var backdropIsLight: Bool { get set }
+}
+
+extension OverlayState: BackdropState {}
+extension PrompterModel: BackdropState {}
+
 /// 字色选"自动"时，隔几秒看一眼悬浮窗后面的画面有多亮：亮就换黑字配浅色玻璃，暗就白字。
 /// 只取悬浮窗那块区域，缩到 16×16 算平均亮度，不存图；悬浮窗自己不会出现在截图里（sharingType = .none）。
 /// 没有录屏权限时不看，保持白字。
@@ -8,7 +17,7 @@ import ScreenCaptureKit
 final class BackdropProbe {
     private let panel: NSWindow
     private let settings: SettingsStore
-    private let state: OverlayState
+    private let state: any BackdropState
     private var task: Task<Void, Never>?
     /// 连续两次看到同样的结论才切换，画面闪一下不会来回换
     private var streak = 0
@@ -17,7 +26,7 @@ final class BackdropProbe {
     static let lightAbove = 0.28
     static let darkBelow = 0.16
 
-    init(panel: NSWindow, settings: SettingsStore, state: OverlayState) {
+    init(panel: NSWindow, settings: SettingsStore, state: any BackdropState) {
         self.panel = panel
         self.settings = settings
         self.state = state

@@ -79,6 +79,12 @@ enum SelfTest {
             Task { exit(await screenshot(file: file, instruction: instruction, appName: appName, settings: current)) }
             return true
         }
+        // --selftest-prompter [截图文件夹]：提词器（会在屏幕上开一个窗口几秒）
+        if arguments.contains("--selftest-prompter") {
+            let folder = value(after: "--selftest-prompter").flatMap { $0.hasPrefix("--") ? nil : $0 }
+            Task { exit(await prompter(to: folder)) }
+            return true
+        }
         if arguments.contains("--selftest-followup") {
             exit(followUp())
         }

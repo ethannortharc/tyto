@@ -280,7 +280,15 @@ struct OverlayView: View {
                 PillButton(title: tr("清除选择", "Clear Selection"), theme: theme) { session.selection = [] }
             }
             Spacer(minLength: 0)
-            PanelToggle(count: session.replies.count, on: settings.value.showReplyPanel, theme: theme) {
+            PanelToggle(symbol: "doc.text", title: nil, on: settings.value.showPrompter, theme: theme,
+                        help: settings.value.showPrompter ? tr("收起提词器（⌃⌥N）", "Hide Prompter (⌃⌥N)")
+                                                          : tr("提词器：会前准备的材料（⌃⌥N）", "Prompter: your prepared notes (⌃⌥N)")) {
+                settings.value.showPrompter.toggle()
+            }
+            PanelToggle(symbol: "sidebar.left",
+                        title: session.replies.isEmpty ? tr("回复", "Replies") : tr("回复 \(session.replies.count)", "Replies \(session.replies.count)"),
+                        on: settings.value.showReplyPanel, theme: theme,
+                        help: settings.value.showReplyPanel ? tr("收起回复面板（⌃⌥B）", "Hide Replies (⌃⌥B)") : tr("打开回复面板（⌃⌥B）", "Show Replies (⌃⌥B)")) {
                 settings.value.showReplyPanel.toggle()
             }
         }
@@ -392,10 +400,14 @@ private struct SourceDot: View {
 }
 
 /// 回复面板的开关：图标 + 条数，打开时用强调色
+/// 底部右边打开旁边窗口（提词器、回复面板）的开关；开着时是强调色
 private struct PanelToggle: View {
-    let count: Int
+    let symbol: String
+    /// nil 时只有图标
+    let title: String?
     let on: Bool
     let theme: OverlayTheme
+    let help: String
     let action: () -> Void
 
     @State private var hovered = false
@@ -403,18 +415,19 @@ private struct PanelToggle: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: "sidebar.left").font(.system(size: 11.5, weight: .medium))
-                Text(count > 0 ? tr("回复 \(count)", "Replies \(count)") : tr("回复", "Replies"))
-                    .font(.system(size: 11.5, weight: .semibold).monospacedDigit())
+                Image(systemName: symbol).font(.system(size: 11.5, weight: .medium))
+                if let title {
+                    Text(title).font(.system(size: 11.5, weight: .semibold).monospacedDigit())
+                }
             }
             .foregroundStyle(on ? theme.accent : theme.ink.opacity(hovered ? 1 : 0.8))
-            .padding(.horizontal, 10)
+            .padding(.horizontal, title == nil ? 8 : 10)
             .frame(height: 26)
             .background(Capsule().fill(on ? theme.accent.opacity(theme.light ? 0.14 : 0.18) : theme.ink.opacity(hovered ? 0.12 : 0.07)))
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
-        .help(on ? tr("收起回复面板（⌃⌥B）", "Hide Replies (⌃⌥B)") : tr("打开回复面板（⌃⌥B）", "Show Replies (⌃⌥B)"))
+        .help(help)
     }
 }
 
