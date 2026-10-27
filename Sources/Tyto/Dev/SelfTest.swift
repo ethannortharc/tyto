@@ -32,7 +32,7 @@ enum SelfTest {
             return true
         }
         if let path = value(after: "--render-preview") {
-            exit(renderPreview(to: path, settings: settings))
+            exit(renderPreview(to: path, settings: SettingsStore(persists: false)))
         }
         if arguments.contains("--selftest-echo") {
             exit(echo())
@@ -171,7 +171,7 @@ enum SelfTest {
     /// 用示例数据把悬浮窗画成 PNG，检查排版（不截屏）。每个主题一张会议字幕，再加一张截屏回复。
     @MainActor
     static func renderPreview(to folder: String, settings: SettingsStore) -> Int32 {
-        let session = SessionModel(settings: settings, skills: SkillStore())
+        let session = SessionModel(settings: settings, skills: SkillStore(), persists: false)
         func row(_ channel: Channel, _ speaker: Int?, _ text: String, _ translation: String?, pending: String = "",
                  at minute: Int, _ second: Int) -> Utterance {
             var row = Utterance(channel: channel, speaker: speaker, language: "en")
@@ -203,8 +203,6 @@ enum SelfTest {
         try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
         session.speakerNames["local:1"] = "我"
         session.keywords = "launch, budget"
-        let original = settings.value
-        defer { settings.value = original }
 
         for theme in ThemeID.allCases {
             settings.value.theme = theme

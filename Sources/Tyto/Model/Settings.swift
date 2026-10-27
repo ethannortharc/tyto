@@ -126,10 +126,13 @@ final class SettingsStore: ObservableObject {
     private static let defaultsKey = "settings.v1"
 
     @Published var value: AppSettings {
-        didSet { save() }
+        didSet { if persists { save() } }
     }
+    private let persists: Bool
 
-    init() {
+    /// - persists: false 时改了也不写回（预览、自测用，不碰真实设置）
+    init(persists: Bool = true) {
+        self.persists = persists
         value = UserDefaults.standard.data(forKey: Self.defaultsKey).flatMap(Self.decode) ?? AppSettings()
     }
 

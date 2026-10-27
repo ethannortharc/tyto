@@ -49,9 +49,13 @@ final class SessionModel: ObservableObject {
     /// 识别中的文字这么久没变化，也当说完处理
     private static let staleGap: TimeInterval = 4
 
-    init(settings: SettingsStore, skills: SkillStore) {
+    /// false 时不读写会话文件（预览、自测用，不碰真实记录）
+    private let persists: Bool
+
+    init(settings: SettingsStore, skills: SkillStore, persists: Bool = true) {
         self.settings = settings
         self.skills = skills
+        self.persists = persists
     }
 
     // MARK: - 开始、停止
@@ -620,6 +624,7 @@ final class SessionModel: ObservableObject {
     }
 
     private func scheduleSave() {
+        guard persists else { return }
         saveTask?.cancel()
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2))
@@ -629,6 +634,7 @@ final class SessionModel: ObservableObject {
     }
 
     func save() {
+        guard persists else { return }
         let file = SessionFile(title: title, context: context, activeSkillIDs: activeSkillIDs.sorted(),
                                speakerNames: speakerNames, rows: rows.filter(\.isClosed), replies: replies,
                                keywords: keywords)
