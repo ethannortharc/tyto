@@ -42,6 +42,8 @@ struct MainView: View {
         .frame(minWidth: 820, minHeight: 620)
         // 和系统设置一样用滑动开关
         .toggleStyle(.switch)
+        // 换界面语言时整棵重建，文字立即全部换过来（当前在哪一页不受影响）
+        .id(settings.value.language)
     }
 
     @ViewBuilder
@@ -1137,6 +1139,15 @@ private struct AppearancePage: View {
 
     var body: some View {
         Form {
+            Section {
+                Row(symbol: "globe", tint: .blue, title: "界面语言 · Language") {
+                    Picker("", selection: $settings.value.language) {
+                        ForEach(AppLanguage.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 200)
+                }
+            }
             Section {
                 HStack(spacing: 12) {
                     ForEach(ThemeID.allCases) { theme in

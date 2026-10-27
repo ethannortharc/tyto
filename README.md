@@ -21,6 +21,7 @@ A floating meeting assistant for macOS. It turns what people say into live capti
 - [Self-test commands](#self-test-commands)
 - [Project layout](#project-layout)
 - [Known limitations](#known-limitations)
+- [License](#license)
 
 ## What it does
 
@@ -43,7 +44,7 @@ The app is notarized by Apple, so it opens normally. Tyto has no Dock icon — l
 
 ## First run
 
-The settings window opens on first launch. (The interface is in Chinese for now; page names below are translated — *Models & services* is 模型与服务, *Session* is 会话, *Translation* is 翻译, *Listening* is 听写, *Screenshot replies* is 截屏回复.)
+The settings window opens on first launch. The interface follows your system language (Chinese or English); switch it any time from the menu bar icon → *Language*, or on the *Appearance* page.
 
 1. **Models & services**: add a provider and its key (OpenRouter is a good start: one key covers Claude, GPT and Gemini), then pick a model under *Uses → Reply*. To try captions and translation only, skip this — on-device recognition and translation need no key.
 2. **Translation**: if you use Apple's on-device translation, click *Download* to install the language pair.
@@ -70,7 +71,7 @@ They work while the meeting app is in front.
 | ⌃⌥S | Screenshot reply (frontmost app, or whole screen if set) |
 | ⌃⌥A | Screenshot reply: select an area |
 | ⌃⌥T | Show / hide the overlay |
-| ⌃⌥P | Click-through (clicks go to the window below) |
+| ⌃⌥P | Click-through on / off (clicks go to the window below; hold ⌥ over the overlay to use it meanwhile) |
 | ⌃⌥Q | Quit |
 
 ## Models and services
@@ -192,6 +193,9 @@ Sources/ShareCheck/   screen-share check app
 - Pull-down menus on the overlay are drawn by the system and may show briefly in a screen share while open.
 - Soniox and Deepgram follow their published protocols but haven't run through long real meetings yet.
 - Hiding during a Google Meet share in Chrome hasn't been tested directly (Chrome uses the same ScreenCaptureKit path, which has been).
-- The UI is in Chinese for now.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
 
 © 2026 Ethan H.B. Zhou

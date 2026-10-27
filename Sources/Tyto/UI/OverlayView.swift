@@ -27,6 +27,8 @@ struct OverlayView: View {
         GeometryReader { geometry in
             content(height: geometry.size.height)
         }
+        // 换界面语言时整棵重建，文字立即全部换过来
+        .id(settings.value.language)
     }
 
     private func content(height: CGFloat) -> some View {
@@ -64,8 +66,11 @@ struct OverlayView: View {
                       color: theme.local[0])
             Spacer(minLength: 4)
             if ui.clickThrough {
-                Text("穿透中").font(.system(size: 11, weight: .semibold)).foregroundStyle(.orange)
-                    .help("点击穿透开着：鼠标会点到悬浮窗下面的窗口。⌃⌥P 关掉")
+                Text(ui.peeking ? tr("可以点了 · 松开 ⌥ 恢复", "Clickable · release ⌥")
+                                : tr("穿透中 · 按住 ⌥ 可点 · ⌃⌥P 关闭", "Click-through · hold ⌥ · ⌃⌥P off"))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(ui.peeking ? .green : .orange)
+                    .lineLimit(1)
             }
             IconButton(symbol: "character.bubble", active: settings.value.translationEnabled, accent: theme.accent,
                        help: settings.value.translationEnabled ? "隐藏译文" : "显示译文") {
@@ -289,6 +294,8 @@ struct OverlayView: View {
 @MainActor
 final class OverlayState: ObservableObject {
     @Published var clickThrough = false
+    /// 点击穿透时按住 ⌥ 临时可点
+    @Published var peeking = false
 }
 
 // MARK: - 小部件

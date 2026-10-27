@@ -18,7 +18,11 @@ final class HotKeys {
         let hotKeyID = EventHotKeyID(signature: OSType(0x5459_544F), id: id) // "TYTO"
         let status = RegisterEventHotKey(UInt32(keyCode), UInt32(modifiers), hotKeyID,
                                          GetApplicationEventTarget(), 0, &reference)
-        if status == noErr, let reference { references.append(reference) }
+        if status == noErr, let reference {
+            references.append(reference)
+        } else {
+            RunLog.write("快捷键注册失败（键码 \(keyCode)，\(status)），可能被别的 App 占用了")
+        }
     }
 
     private func installIfNeeded() {

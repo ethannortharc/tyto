@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let hotKeys = HotKeys()
     private var subscriptions: Set<AnyCancellable> = []
     private var sweepTask: Task<Void, Never>?
+    private var optionTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if SelfTest.runIfRequested(settings: settings) { return }
@@ -32,8 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.orderFrontRegardless()
         overlay = panel
         overlayState.$clickThrough
-            .sink { [weak panel] on in panel?.clickThrough = on }
+            .sink { [weak self] _ in self?.updateClickThrough() }
             .store(in: &subscriptions)
+        watchOptionKey()
 
         setupStatusItem()
         registerHotKeys()
@@ -89,6 +91,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if overlay.isVisible { overlay.orderOut(nil) } else { overlay.orderFrontRegardless() }
     }
 
+    /// 点击穿透时鼠标会穿过悬浮窗，悬浮窗本身就点不了。按住 ⌥ 并把鼠标移到悬浮窗上，临时恢复可点，松开又穿透。
+    private func watchOptionKey() {
+        optionTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(100))
+                updateClickThrough()
+            }
+        }
+    }
+
+    private func updateClickThrough() {
+        guard let overlay else { return }
+        let peeking = overlayState.clickThrough
+            && NSEvent.modifierFlags.contains(.option)
+            && overlay.frame.contains(NSEvent.mouseLocation)
+        if overlayState.peeking != peeking { overlayState.peeking = peeking }
+        let ignores = overlayState.clickThrough && !peeking
+        if overlay.ignoresMouseEvents != ignores { overlay.ignoresMouseEvents = ignores }
+    }
+
     /// 弹出来的小窗口（改名字的气泡等）是另建的窗口，不会自动继承"不被共享"；定时把本 app 所有窗口都设上。
     private func hideAllWindowsFromSharing() {
         sweepTask = Task {
@@ -115,18 +137,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.removeAllItems()
         let running = session.isRunning
         let current = settings.value
-        let status = NSMenuItem(title: running ? "正在听" : "没在听", action: nil, keyEquivalent: "")
+        let status = NSMenuItem(title: running ? tr("正在听", "Listening") : tr("没在听", "Not Listening"),
+                                action: nil, keyEquivalent: "")
         status.image = symbol(running ? "record.circle.fill" : "record.circle")
         status.isEnabled = false
-        let sources = [current.captureRemote ? "远端" : nil, current.captureLocal ? "本地" : nil].compactMap { $0 }
-        status.subtitle = "\(sources.isEmpty ? "没开声音来源" : sources.joined(separator: " + ")) · \(current.speechMethod.title)"
+        let sources = [current.captureRemote ? tr("远端", "Remote") : nil, current.captureLocal ? tr("本地", "Local") : nil]
+            .compactMap { $0 }
+        status.subtitle = "\(sources.isEmpty ? tr("没开声音来源", "No audio source") : sources.joined(separator: " + ")) · \(current.speechMethod.title)"
         menu.addItem(status)
-        menu.addItem(item(running ? "停止听" : "开始听", "waveform", #selector(toggleListening), key: "l"))
+        menu.addItem(item(running ? tr("停止听", "Stop Listening") : tr("开始听", "Start Listening"), "waveform",
+                          #selector(toggleListening), key: "l"))
         menu.addItem(.separator())
 
-        menu.addItem(item(session.selection.isEmpty ? "回复最近的话" : "回复选中的 \(session.selection.count) 句",
+        menu.addItem(item(session.selection.isEmpty
+                            ? tr("回复最近的话", "Reply to Latest")
+                            : tr("回复选中的 \(session.selection.count) 句", "Reply to \(session.selection.count) Selected"),
                           "arrowshape.turn.up.left.fill", #selector(replyAction), key: "r"))
-        let capture = item("截屏回复", "camera.viewfinder", nil)
+        let capture = item(tr("截屏回复", "Screenshot Reply"), "camera.viewfinder", nil)
         let submenu = NSMenu()
         for target in AppSettings.CaptureTarget.allCases {
             let key = target == current.captureTarget ? "s" : (target == .region ? "a" : "")
@@ -135,26 +162,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             submenu.addItem(entry)
         }
         submenu.addItem(.separator())
-        submenu.addItem(item("用剪贴板里的图片", "doc.on.clipboard", #selector(clipboardImageAction)))
+        submenu.addItem(item(tr("用剪贴板里的图片", "Use Image on Clipboard"), "doc.on.clipboard", #selector(clipboardImageAction)))
         capture.submenu = submenu
         menu.addItem(capture)
         menu.addItem(.separator())
 
-        menu.addItem(item(overlay?.isVisible == true ? "隐藏悬浮窗" : "显示悬浮窗", "macwindow", #selector(toggleOverlayAction), key: "t"))
-        let translation = item("显示译文", "character.bubble", #selector(toggleTranslation))
+        menu.addItem(item(overlay?.isVisible == true ? tr("隐藏悬浮窗", "Hide Overlay") : tr("显示悬浮窗", "Show Overlay"),
+                          "macwindow", #selector(toggleOverlayAction), key: "t"))
+        let translation = item(tr("显示译文", "Show Translation"), "character.bubble", #selector(toggleTranslation))
         translation.state = current.translationEnabled ? .on : .off
         menu.addItem(translation)
-        let clickThrough = item("点击穿透", "cursorarrow.motionlines", #selector(toggleClickThrough), key: "p")
+        let clickThrough = item(tr("点击穿透", "Click-Through"), "cursorarrow.motionlines", #selector(toggleClickThrough), key: "p")
         clickThrough.state = overlayState.clickThrough ? .on : .off
         menu.addItem(clickThrough)
         menu.addItem(.separator())
 
-        let settingsItem = item("会话与设置…", "gearshape", #selector(openMainAction))
+        let settingsItem = item(tr("会话与设置…", "Session & Settings…"), "gearshape", #selector(openMainAction))
         settingsItem.keyEquivalent = ","
         settingsItem.keyEquivalentModifierMask = [.command]
         menu.addItem(settingsItem)
-        menu.addItem(item("关于 Tyto 听译", "info.circle", #selector(about)))
-        menu.addItem(item("退出", "power", #selector(quit), key: "q"))
+        let languageItem = item("语言 · Language", "globe", nil)
+        let languages = NSMenu()
+        for language in AppLanguage.allCases {
+            let entry = item(language.label, language == .system ? "gearshape.2" : "character", #selector(languageAction(_:)))
+            entry.representedObject = language.rawValue
+            entry.state = current.language == language ? .on : .off
+            languages.addItem(entry)
+        }
+        languageItem.submenu = languages
+        menu.addItem(languageItem)
+        menu.addItem(item(tr("关于 Tyto 听译", "About Tyto"), "info.circle", #selector(about)))
+        menu.addItem(item(tr("退出", "Quit"), "power", #selector(quit), key: "q"))
+    }
+
+    @objc private func languageAction(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let language = AppLanguage(rawValue: raw) else { return }
+        settings.value.language = language
     }
 
     private func symbol(_ name: String) -> NSImage? {

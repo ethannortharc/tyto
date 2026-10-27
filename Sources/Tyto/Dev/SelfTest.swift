@@ -76,10 +76,12 @@ enum SelfTest {
             return true
         }
         if let path = value(after: "--render-settings") {
-            exit(renderSettings(to: path))
+            exit(renderSettings(to: path, settings: current))
         }
         if let path = value(after: "--render-preview") {
-            exit(renderPreview(to: path, settings: SettingsStore(persists: false)))
+            let store = SettingsStore(persists: false)
+            store.value = current
+            exit(renderPreview(to: path, settings: store))
         }
         if arguments.contains("--selftest-echo") {
             exit(echo())
@@ -413,8 +415,9 @@ enum SelfTest {
 
     /// 把设置窗口每一页画成图片：窗口建在屏幕外，画它的图层（系统控件也能画出来，不截屏）
     @MainActor
-    static func renderSettings(to folder: String) -> Int32 {
+    static func renderSettings(to folder: String, settings current: AppSettings) -> Int32 {
         let settings = SettingsStore(persists: false)
+        settings.value = current
         let session = SampleData.session(settings: settings)
         let skills = SkillStore()
         let folderURL = URL(filePath: folder)

@@ -117,6 +117,9 @@ struct AppSettings: Codable, Equatable {
     /// 截屏回复生成好后，把第一个回复放进剪贴板
     var copyFirstScreenshotReply = true
 
+    // 界面语言
+    var language: AppLanguage = .system
+
     // 悬浮窗
     var theme: ThemeID = .obsidian
     /// 底色浓度：0 是完全透明（连玻璃都没有），往右先出现玻璃，再加深底色
@@ -129,7 +132,10 @@ final class SettingsStore: ObservableObject {
     private static let defaultsKey = "settings.v1"
 
     @Published var value: AppSettings {
-        didSet { if persists { save() } }
+        didSet {
+            if value.language != oldValue.language { L10n.set(value.language) }
+            if persists { save() }
+        }
     }
     private let persists: Bool
 
@@ -137,6 +143,7 @@ final class SettingsStore: ObservableObject {
     init(persists: Bool = true) {
         self.persists = persists
         value = UserDefaults.standard.data(forKey: Self.defaultsKey).flatMap(Self.decode) ?? AppSettings()
+        L10n.set(value.language)
     }
 
     /// 存下来的设置盖在默认值上再解析：以后加了新设置项，老设置里没有的字段用默认值，其余照旧。
