@@ -17,9 +17,10 @@ import Foundation
 ///   Tyto --selftest-settings                                              读出现在的设置（老设置会被换算），只看不写
 ///   Tyto --selftest-deepgram                                              Deepgram 返回消息的解析
 ///   以上自测都可以加 --settings-json '{...}'，临时改设置，不写回
-///   Tyto --selftest-glass <文件夹>                                         真实玻璃效果：悬浮窗盖在模拟会议画面上，只截这两个窗口
+///   Tyto --selftest-glass <文件夹> [--light]                               真实玻璃效果：悬浮窗盖在模拟会议画面（或白底页面）上，只截这两个窗口
 ///   Tyto --render-settings <文件夹>                                        把设置窗口每一页画成图片（窗口建在屏幕外，不截屏）
 ///   Tyto --render-preview <文件夹>                                         用示例数据把悬浮窗画成图片（不碰屏幕）
+///   Tyto --selftest-backdrop                                              字色自动：在屏幕上放白底页面和会议画面，量亮度，看选白字还是黑字
 enum SelfTest {
     @MainActor
     static func runIfRequested(settings: SettingsStore) -> Bool {
@@ -75,6 +76,10 @@ enum SelfTest {
             let instruction = value(after: "--instruction")
             let appName = value(after: "--app")
             Task { exit(await screenshot(file: file, instruction: instruction, appName: appName, settings: current)) }
+            return true
+        }
+        if arguments.contains("--selftest-backdrop") {
+            Task { exit(await backdrop()) }
             return true
         }
         if let path = value(after: "--selftest-glass") {
@@ -251,8 +256,20 @@ enum SelfTest {
             guard render(session: session, settings: settings, to: folderURL.appending(path: "screenshot-reply-\(theme.rawValue).png"))
             else { return 1 }
         }
-        // 翻译语言包没下载时的提示条
+        // 两种字幕样式，盖在会议画面（白字）和白底页面（黑字）上
         settings.value.theme = AppSettings().theme
+        let style = settings.value.transcriptStyle
+        for transcriptStyle in TranscriptStyle.allCases {
+            settings.value.transcriptStyle = transcriptStyle
+            for light in [false, true] {
+                session.showSample(rows: rows, replies: [meetingReply], selection: [rows[3].id])
+                guard render(session: session, settings: settings, light: light,
+                             to: folderURL.appending(path: "style-\(transcriptStyle.rawValue)-\(light ? "light" : "dark").png"))
+                else { return 1 }
+            }
+        }
+        settings.value.transcriptStyle = style
+        // 翻译语言包没下载时的提示条
         session.showSample(rows: rows, replies: [], selection: [])
         session.notice = TytoError.translationNotInstalled(tr("英语 → 简体中文", "English → Simplified Chinese")).localizedDescription
         session.noticeOpensTranslation = true
@@ -385,11 +402,14 @@ enum SelfTest {
         guard let screen = NSScreen.screens.first else { return 1 }
         let area = screen.visibleFrame
         let stage = NSRect(x: area.midX - 320, y: area.midY - 380, width: 640, height: 760)
+        let light = CommandLine.arguments.contains("--light")
         let backdrop = NSWindow(contentRect: stage, styleMask: [.borderless], backing: .buffered, defer: false)
         backdrop.level = .floating
-        backdrop.contentView = NSHostingView(rootView: SampleBackdrop())
+        backdrop.contentView = NSHostingView(rootView: SampleBackdrop(light: light))
         backdrop.orderFrontRegardless()
-        let panel = OverlayPanel(rootView: OverlayView(session: session, settings: settings, ui: OverlayState()),
+        let state = OverlayState()
+        state.backdropIsLight = light && CommandLine.arguments.contains("--auto")
+        let panel = OverlayPanel(rootView: OverlayView(session: session, settings: settings, ui: state),
                                  remembersFrame: false)
         panel.sharingType = .readOnly
         panel.setFrame(NSRect(x: stage.minX + 80, y: stage.minY + 80, width: 480, height: 600), display: true)
@@ -401,7 +421,8 @@ enum SelfTest {
         let folderURL = URL(filePath: folder)
         try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
         let displayID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
-        for opacity in [0.0, 0.12, 0.25, 0.5] {
+        let opacities = light ? [0.0, 0.25, 0.45, 0.62, 0.9] : [0.0, 0.12, 0.25, 0.5]
+        for opacity in opacities {
             settings.value.overlayOpacity = opacity
             try? await Task.sleep(for: .seconds(1.2))
             do {
@@ -418,7 +439,7 @@ enum SelfTest {
                 config.height = Int(stage.height * 2)
                 config.showsCursor = false
                 let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
-                let url = folderURL.appending(path: "glass-\(settings.value.theme.rawValue)-\(Int(opacity * 100)).png")
+                let url = folderURL.appending(path: "glass-\(light ? "light-" : "")\(state.backdropIsLight ? "auto-" : "")\(settings.value.theme.rawValue)-\(Int(opacity * 100)).png")
                 try ImageFile.writePNG(image, to: url)
                 print(url.path)
             } catch {
@@ -427,6 +448,44 @@ enum SelfTest {
             }
         }
         return 0
+    }
+
+    /// 字色自动的判断：在屏幕上依次放白底页面、会议画面，量那块区域的亮度，看会不会选对
+    @MainActor
+    static func backdrop() async -> Int32 {
+        guard CGPreflightScreenCaptureAccess() else {
+            print("没有录屏权限，量不了")
+            return 1
+        }
+        guard let screen = NSScreen.screens.first,
+              let displayID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+        else { return 1 }
+        let area = screen.visibleFrame
+        let stage = NSRect(x: area.midX - 240, y: area.midY - 300, width: 480, height: 600)
+        var wrong = 0
+        for light in [true, false] {
+            let window = NSWindow(contentRect: stage, styleMask: [.borderless], backing: .buffered, defer: false)
+            window.level = .floating
+            window.contentView = NSHostingView(rootView: SampleBackdrop(light: light))
+            window.orderFrontRegardless()
+            try? await Task.sleep(for: .seconds(0.8))
+            let rect = CGRect(x: stage.minX - screen.frame.minX + 40, y: screen.frame.maxY - stage.maxY + 40,
+                              width: stage.width - 80, height: stage.height - 80)
+            do {
+                let started = Date.now
+                let value = try await BackdropProbe.luminance(of: rect, display: displayID)
+                let ms = Int(Date.now.timeIntervalSince(started) * 1000)
+                let black = BackdropProbe.isLight(value, current: false)
+                print("\(light ? "白底页面" : "会议画面")：亮度 \(String(format: "%.2f", value))（\(ms) ms）→ \(black ? "黑字" : "白字")")
+                if black != light { wrong += 1 }
+            } catch {
+                print("量不了：\(error.localizedDescription)")
+                wrong += 1
+            }
+            window.orderOut(nil)
+        }
+        print(wrong == 0 ? "判断正确" : "判断不对")
+        return wrong == 0 ? 0 : 1
     }
 
     /// 把设置窗口每一页画成图片：窗口建在屏幕外，画它的图层（系统控件也能画出来，不截屏）
@@ -503,15 +562,17 @@ enum SelfTest {
 
     /// 悬浮窗画在一张模拟的视频会议画面上，玻璃用"模糊后的背景 + 主题底色"近似
     @MainActor
-    private static func render(session: SessionModel, settings: SettingsStore, to url: URL) -> Bool {
+    private static func render(session: SessionModel, settings: SettingsStore, light: Bool = false, to url: URL) -> Bool {
         let size = CGSize(width: 480, height: 600)
-        let backdrop = SampleBackdrop()
+        let backdrop = SampleBackdrop(light: light)
+        let state = OverlayState()
+        state.backdropIsLight = light
         let view = ZStack {
             backdrop
             backdrop.blur(radius: 26)
                 .frame(width: size.width, height: size.height)
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            OverlayView(session: session, settings: settings, ui: OverlayState(), flatForPreview: true)
+            OverlayView(session: session, settings: settings, ui: state, flatForPreview: true)
                 .frame(width: size.width, height: size.height)
         }
         .frame(width: size.width + 80, height: size.height + 80)

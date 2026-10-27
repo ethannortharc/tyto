@@ -23,7 +23,16 @@ struct OverlayView: View {
     @State private var replyCollapsed = false
     @State private var showAppearance = false
 
-    private var theme: OverlayTheme { OverlayTheme.of(settings.value.theme) }
+    private var theme: OverlayTheme { OverlayTheme.of(settings.value.theme, light: lightAppearance) }
+
+    /// 黑字配浅色玻璃：手动选了黑字，或者自动且悬浮窗后面的画面是亮的
+    private var lightAppearance: Bool {
+        switch settings.value.overlayTextColor {
+        case .auto: ui.backdropIsLight
+        case .white: false
+        case .black: true
+        }
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -36,7 +45,7 @@ struct OverlayView: View {
     private func content(height: CGFloat) -> some View {
         VStack(spacing: 0) {
             header
-            Hairline()
+            Hairline(ink: theme.ink)
             ZStack(alignment: .top) {
                 transcript
                 if let notice = session.notice { noticeBanner(notice) }
@@ -44,12 +53,12 @@ struct OverlayView: View {
             footer(height: height)
         }
         .font(.system(size: settings.value.fontSize))
-        .foregroundStyle(.white)
-        // 底色调得很淡时，文字加一圈细阴影，盖在亮的画面上也看得清
-        .shadow(color: .black.opacity(GlassBackground.textShadow(settings.value.overlayOpacity)), radius: 1.4, y: 0.5)
+        .foregroundStyle(theme.ink)
+        // 底色调得很淡时，文字加一圈细阴影（黑字时是白晕），盖在花的画面上也看得清
+        .shadow(color: theme.halo.opacity(GlassBackground.textShadow(settings.value.overlayOpacity)), radius: 1.4, y: 0.5)
         .background(GlassBackground(theme: theme, opacity: settings.value.overlayOpacity, flat: flatForPreview))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .environment(\.colorScheme, .dark)
+        .environment(\.colorScheme, lightAppearance ? .light : .dark)
         .tint(theme.accent)
         .onChange(of: session.replies.count) {
             shownReplyID = session.replies.last?.id
@@ -62,9 +71,9 @@ struct OverlayView: View {
     private var header: some View {
         HStack(spacing: 10) {
             ListenButton(session: session, theme: theme)
-            SourceDot(label: tr("远端", "Remote"), on: settings.value.captureRemote, level: session.levels[.remote] ?? 0,
+            SourceDot(ink: theme.ink, label: tr("远端", "Remote"), on: settings.value.captureRemote, level: session.levels[.remote] ?? 0,
                       color: theme.remote[0])
-            SourceDot(label: tr("本地", "Local"), on: settings.value.captureLocal, level: session.levels[.local] ?? 0,
+            SourceDot(ink: theme.ink, label: tr("本地", "Local"), on: settings.value.captureLocal, level: session.levels[.local] ?? 0,
                       color: theme.local[0])
             Spacer(minLength: 4)
             if ui.clickThrough {
@@ -74,20 +83,27 @@ struct OverlayView: View {
                     .foregroundStyle(ui.peeking ? .green : .orange)
                     .lineLimit(1)
             }
-            IconButton(symbol: "character.bubble", active: settings.value.translationEnabled, accent: theme.accent,
-                       help: settings.value.translationEnabled ? tr("隐藏译文", "Hide Translation") : tr("显示译文", "Show Translation")) {
-                settings.value.translationEnabled.toggle()
-                session.translationToggled()
+            HStack(spacing: 0) {
+                IconButton(symbol: "translate", active: settings.value.translationEnabled, theme: theme,
+                           help: settings.value.translationEnabled ? tr("隐藏译文", "Hide Translation") : tr("显示译文", "Show Translation"),
+                           size: 26) {
+                    settings.value.translationEnabled.toggle()
+                    session.translationToggled()
+                }
+                captureMenu
+                IconButton(symbol: "paintpalette", active: showAppearance, theme: theme,
+                           help: tr("外观：主题、字色、透明度、字号", "Appearance: theme, text color, tint, font size"), size: 26) {
+                    showAppearance.toggle()
+                }
+                .popover(isPresented: $showAppearance, arrowEdge: .bottom) {
+                    AppearancePopover(settings: settings, ui: ui)
+                }
+                moreMenu
             }
-            captureMenu
-            IconButton(symbol: "paintpalette", active: showAppearance, accent: theme.accent, help: tr("外观：主题、透明度、字号", "Appearance: theme, tint, font size")) {
-                showAppearance.toggle()
-            }
-            .popover(isPresented: $showAppearance, arrowEdge: .bottom) {
-                AppearancePopover(settings: settings, ui: ui)
-            }
-            moreMenu
-            IconButton(symbol: "xmark", accent: theme.accent, help: tr("退出 Tyto（⌃⌥Q）", "Quit Tyto (⌃⌥Q)"), action: actions.quit)
+            .padding(2)
+            .background(Capsule().fill(theme.ink.opacity(0.06)))
+            .overlay(Capsule().strokeBorder(theme.ink.opacity(0.08), lineWidth: 0.5))
+            IconButton(symbol: "xmark", theme: theme, help: tr("退出 Tyto（⌃⌥Q）", "Quit Tyto (⌃⌥Q)"), size: 24, action: actions.quit)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -112,8 +128,9 @@ struct OverlayView: View {
             }
         } label: {
             Image(systemName: "camera.viewfinder")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.7))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(theme.ink.opacity(0.8))
+                .padding(.leading, 6)
         } primaryAction: {
             session.captureAndReply()
         }
@@ -142,10 +159,10 @@ struct OverlayView: View {
                 Button(action: actions.quit) { Label(tr("退出 Tyto ⌃⌥Q", "Quit Tyto ⌃⌥Q"), systemImage: "power") }
             }
         } label: {
-            Image(systemName: "ellipsis.circle")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.7))
-                .frame(width: 28, height: 28)
+            Image(systemName: "ellipsis")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(theme.ink.opacity(0.8))
+                .frame(width: 26, height: 26)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -167,7 +184,7 @@ struct OverlayView: View {
             }
             Spacer(minLength: 0)
             Button { session.notice = nil } label: {
-                Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.6))
+                Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(theme.ink.opacity(0.6))
             }
             .buttonStyle(.plain)
         }
@@ -203,7 +220,9 @@ struct OverlayView: View {
         return LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                 RowView(row: row, session: session, theme: theme, keywords: keywords,
+                        style: settings.value.transcriptStyle,
                         showHeader: Self.startsGroup(rows, index),
+                        endsGroup: index == rows.count - 1 || Self.startsGroup(rows, index + 1),
                         showTranslation: settings.value.translationEnabled,
                         selected: session.selection.contains(row.id),
                         fontSize: settings.value.fontSize)
@@ -231,7 +250,7 @@ struct OverlayView: View {
             }
             VStack(spacing: 6) {
                 Text(tr("准备好了", "Ready")).font(.system(size: 16, weight: .semibold))
-                Text(tr("点「开始听」或按 ⌃⌥L", "Click Start Listening or press ⌃⌥L")).font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.6))
+                Text(tr("点「开始听」或按 ⌃⌥L", "Click Start Listening or press ⌃⌥L")).font(.system(size: 12.5)).foregroundStyle(theme.ink.opacity(0.6))
             }
             VStack(alignment: .leading, spacing: 6) {
                 hint("waveform", tr("远端是会议软件里的声音，本地是麦克风", "Remote is the meeting app's audio; Local is the microphone"))
@@ -247,7 +266,7 @@ struct OverlayView: View {
     private func hint(_ symbol: String, _ text: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: symbol).font(.system(size: 11)).foregroundStyle(theme.accent).frame(width: 16)
-            Text(text).font(.system(size: 12)).foregroundStyle(.white.opacity(0.55))
+            Text(text).font(.system(size: 12)).foregroundStyle(theme.ink.opacity(0.55))
         }
     }
 
@@ -273,7 +292,7 @@ struct OverlayView: View {
             }
         }
         .padding(12)
-        .overlay(alignment: .top) { Hairline() }
+        .overlay(alignment: .top) { Hairline(ink: theme.ink) }
     }
 
     private var shownReply: Reply? {
@@ -285,19 +304,19 @@ struct OverlayView: View {
         let index = session.replies.firstIndex { $0.id == reply.id } ?? 0
         HStack(spacing: 2) {
             if session.replies.count > 1 {
-                IconButton(symbol: "chevron.left", accent: theme.accent, help: tr("上一条回复", "Previous Reply"), size: 24) {
+                IconButton(symbol: "chevron.left", theme: theme, help: tr("上一条回复", "Previous Reply"), size: 24) {
                     shownReplyID = session.replies[max(0, index - 1)].id
                 }
                 .disabled(index == 0)
                 Text("\(index + 1)/\(session.replies.count)")
                     .font(.system(size: 11, weight: .medium).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.5))
-                IconButton(symbol: "chevron.right", accent: theme.accent, help: tr("下一条回复", "Next Reply"), size: 24) {
+                    .foregroundStyle(theme.ink.opacity(0.5))
+                IconButton(symbol: "chevron.right", theme: theme, help: tr("下一条回复", "Next Reply"), size: 24) {
                     shownReplyID = session.replies[min(session.replies.count - 1, index + 1)].id
                 }
                 .disabled(index == session.replies.count - 1)
             }
-            IconButton(symbol: replyCollapsed ? "chevron.up" : "chevron.down", accent: theme.accent,
+            IconButton(symbol: replyCollapsed ? "chevron.up" : "chevron.down", theme: theme,
                        help: replyCollapsed ? tr("展开回复", "Show Reply") : tr("收起回复", "Hide Reply"), size: 24) { replyCollapsed.toggle() }
         }
     }
@@ -309,13 +328,17 @@ final class OverlayState: ObservableObject {
     @Published var clickThrough = false
     /// 点击穿透时按住 ⌥ 临时可点
     @Published var peeking = false
+    /// 悬浮窗后面的画面是亮的（字色自动时换黑字），由 BackdropProbe 定时看一眼
+    @Published var backdropIsLight = false
 }
 
 // MARK: - 小部件
 
 private struct Hairline: View {
+    let ink: Color
+
     var body: some View {
-        Rectangle().fill(.white.opacity(0.08)).frame(height: 1)
+        Rectangle().fill(ink.opacity(0.08)).frame(height: 1)
     }
 }
 
@@ -342,8 +365,8 @@ private struct ListenButton: View {
             .font(.system(size: 12.5, weight: .semibold))
             .padding(.horizontal, 12)
             .frame(height: 28)
-            .background(Capsule().fill(session.isRunning ? theme.accent.opacity(0.16) : .white.opacity(0.08)))
-            .overlay(Capsule().strokeBorder(session.isRunning ? theme.accent.opacity(0.5) : .white.opacity(0.12)))
+            .background(Capsule().fill(session.isRunning ? theme.accent.opacity(0.16) : theme.ink.opacity(0.08)))
+            .overlay(Capsule().strokeBorder(session.isRunning ? theme.accent.opacity(0.5) : theme.ink.opacity(0.12)))
         }
         .buttonStyle(.plain)
         .disabled(session.isStarting)
@@ -379,6 +402,7 @@ private struct LevelBars: View {
 }
 
 private struct SourceDot: View {
+    let ink: Color
     let label: String
     let on: Bool
     let level: Float
@@ -387,10 +411,10 @@ private struct SourceDot: View {
     var body: some View {
         HStack(spacing: 5) {
             Circle()
-                .fill(on ? color : .white.opacity(0.25))
+                .fill(on ? color : ink.opacity(0.25))
                 .frame(width: 6, height: 6)
                 .shadow(color: color.opacity(on && level > 0.02 ? 0.95 : 0), radius: 4)
-            Text(label).font(.system(size: 11.5, weight: .medium)).foregroundStyle(.white.opacity(on ? 0.8 : 0.35))
+            Text(label).font(.system(size: 11.5, weight: .medium)).foregroundStyle(ink.opacity(on ? 0.8 : 0.35))
         }
         .help(on ? tr("\(label)：在听（亮起来表示有声音）", "\(label): listening (lit when there is sound)") : tr("\(label)：没开（会话与设置 → 模型与服务 → 声音来源）", "\(label): off (Session & Settings → Listening → Audio Sources)"))
     }
@@ -399,7 +423,7 @@ private struct SourceDot: View {
 struct IconButton: View {
     let symbol: String
     var active = false
-    let accent: Color
+    let theme: OverlayTheme
     let help: String
     var size: CGFloat = 28
     let action: () -> Void
@@ -410,9 +434,9 @@ struct IconButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: size * 0.46, weight: .medium))
-                .foregroundStyle(active ? accent : .white.opacity(hovered ? 0.95 : 0.65))
+                .foregroundStyle(active ? theme.accent : theme.ink.opacity(hovered ? 1 : 0.8))
                 .frame(width: size, height: size)
-                .background(Circle().fill(.white.opacity(hovered ? 0.12 : active ? 0.07 : 0)))
+                .background(Circle().fill(active ? theme.accent.opacity(theme.light ? 0.14 : 0.18) : theme.ink.opacity(hovered ? 0.10 : 0)))
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
@@ -437,14 +461,14 @@ struct PillButton: View {
                 Text(title)
             }
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(prominent ? theme.onAccent : .white.opacity(0.85))
+            .foregroundStyle(prominent ? theme.onAccent : theme.ink.opacity(0.85))
             .padding(.horizontal, 12)
             .frame(height: 28)
             .background {
                 if prominent {
                     Capsule().fill(theme.accent).brightness(hovered ? 0.06 : 0)
                 } else {
-                    Capsule().fill(.white.opacity(hovered ? 0.14 : 0.08))
+                    Capsule().fill(theme.ink.opacity(hovered ? 0.14 : 0.08))
                 }
             }
         }
@@ -461,7 +485,10 @@ private struct RowView: View {
     @ObservedObject var session: SessionModel
     let theme: OverlayTheme
     let keywords: [String]
+    let style: TranscriptStyle
     let showHeader: Bool
+    /// 同一个人连着说的最后一句（细线样式里竖线到这里收尾）
+    let endsGroup: Bool
     let showTranslation: Bool
     let selected: Bool
     let fontSize: Double
@@ -471,38 +498,47 @@ private struct RowView: View {
     @State private var newName = ""
 
     private var color: Color { theme.color(for: row) }
+    /// 正文离左边的距离：头像样式和名字对齐，细线样式在竖线右边
+    private var textInset: CGFloat { style == .avatar ? 36 : 12 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 5) {
             if showHeader { header }
-            Text(originalText)
-                .font(.system(size: fontSize + 1))
-                .lineSpacing(2)
-                .fixedSize(horizontal: false, vertical: true)
-            if showTranslation, let translation = row.translation {
-                Text(Highlighter.text(translation, keywords: keywords, theme: theme,
-                                      base: theme.translation.opacity(0.72), entities: false))
-                    .font(.system(size: fontSize - 1.5))
-                    .lineSpacing(1.5)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(originalText)
+                    .font(.system(size: fontSize + 1))
+                    .lineSpacing(fontSize * 0.22)
                     .fixedSize(horizontal: false, vertical: true)
+                if showTranslation, let translation = row.translation {
+                    Text(Highlighter.text(translation, keywords: keywords, theme: theme,
+                                          base: theme.translation.opacity(theme.light ? 0.92 : 0.8), entities: false))
+                        .font(.system(size: fontSize - 1.5))
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
+            .padding(.leading, textInset)
         }
         .textSelection(.enabled)
-        .padding(.leading, 20)
+        .padding(.leading, 14)
         .padding(.trailing, 16)
-        .padding(.top, showHeader ? 9 : 3)
-        .padding(.bottom, 4)
+        .padding(.top, showHeader ? 11 : 3)
+        .padding(.bottom, endsGroup ? 7 : 3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(alignment: .leading) {
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(selected ? theme.accent.opacity(0.14) : hovered ? Color.white.opacity(0.05) : .clear)
+                    .fill(selected ? theme.accent.opacity(theme.light ? 0.10 : 0.14) : hovered ? theme.ink.opacity(0.05) : .clear)
                     .padding(.horizontal, 6)
-                Capsule()
-                    .fill(color.opacity(selected ? 1 : 0.6))
-                    .frame(width: 3)
-                    .padding(.leading, 10)
-                    .padding(.vertical, showHeader ? 9 : 3)
+                if style == .bar {
+                    // 一个人连着说的几句共用一条线，不再一句一段
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(color.opacity(selected ? 1 : 0.55))
+                        .frame(width: 2)
+                        .padding(.leading, 16)
+                        .padding(.top, showHeader ? 13 : 0)
+                        .padding(.bottom, endsGroup ? 9 : 0)
+                }
             }
         }
         .overlay(alignment: .topTrailing) {
@@ -512,7 +548,7 @@ private struct RowView: View {
                 }
                 .scaleEffect(0.86)
                 .padding(.trailing, 8)
-                .padding(.top, showHeader ? 4 : 0)
+                .padding(.top, showHeader ? 6 : 0)
             }
         }
         .contentShape(Rectangle())
@@ -521,30 +557,49 @@ private struct RowView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 8) {
             Button {
                 newName = session.speakerNames[row.speakerKey] ?? ""
                 renaming = true
             } label: {
-                Text(session.speakerLabel(row))
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(color)
+                HStack(spacing: style == .avatar ? 8 : 0) {
+                    if style == .avatar { avatar }
+                    Text(session.speakerLabel(row))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(style == .avatar ? theme.ink.opacity(0.88) : color)
+                }
             }
             .buttonStyle(.plain)
             .help(tr("点一下改名字，比如改成「我」", "Click to rename, e.g. to “Me”"))
             .popover(isPresented: $renaming) { renameField }
             Text(row.startedAt, format: .dateTime.hour(.twoDigits(amPM: .omitted)).minute().second())
                 .font(.system(size: 10.5).monospacedDigit())
-                .foregroundStyle(.white.opacity(0.32))
+                .foregroundStyle(theme.ink.opacity(0.42))
             if TextJoin.isQuestion(row.text) {
                 Text(tr("提问", "Question"))
-                    .font(.system(size: 9.5, weight: .bold))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1.5)
-                    .background(Capsule().fill(theme.accent.opacity(0.2)))
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(theme.accent.opacity(theme.light ? 0.12 : 0.18)))
                     .foregroundStyle(theme.accent)
             }
         }
+        .padding(.leading, style == .avatar ? 6 : 12)
+    }
+
+    /// 说话人头像：起了名字用名字的第一个字，没起用编号
+    private var avatar: some View {
+        let initial: String = {
+            if let name = session.speakerNames[row.speakerKey], let first = name.first { return String(first).uppercased() }
+            if let speaker = row.speaker { return "\(speaker)" }
+            return row.channel == .remote ? tr("远", "R") : tr("本", "L")
+        }()
+        return Text(initial)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(color)
+            .frame(width: 22, height: 22)
+            .background(Circle().fill(color.opacity(theme.light ? 0.14 : 0.18)))
+            .overlay(Circle().strokeBorder(color.opacity(0.45), lineWidth: 0.75))
     }
 
     private var renameField: some View {
@@ -563,12 +618,12 @@ private struct RowView: View {
 
     private var originalText: AttributedString {
         var text = row.isClosed || row.pending.isEmpty
-            ? Highlighter.text(row.text, keywords: keywords, theme: theme, base: .white.opacity(0.95))
+            ? Highlighter.text(row.text, keywords: keywords, theme: theme, base: theme.ink.opacity(0.95))
             : AttributedString(row.text)
-        if !row.isClosed { text.foregroundColor = .white.opacity(0.95) }
+        if !row.isClosed { text.foregroundColor = theme.ink.opacity(0.95) }
         if !row.pending.isEmpty {
             var pending = AttributedString((row.text.isEmpty ? "" : " ") + row.pending)
-            pending.foregroundColor = .white.opacity(0.42)
+            pending.foregroundColor = theme.ink.opacity(0.42)
             text += pending
         }
         return text
@@ -595,7 +650,7 @@ private struct ReplyCard: View {
         VStack(alignment: .leading, spacing: 10) {
             heading
             if let status = reply.status {
-                Text(status).font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
+                Text(status).font(.system(size: 12)).foregroundStyle(theme.ink.opacity(0.6))
             }
             if flat {
                 sections
@@ -612,8 +667,8 @@ private struct ReplyCard: View {
             }
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.white.opacity(0.06)))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.09)))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(theme.ink.opacity(0.06)))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(theme.ink.opacity(0.09)))
         .onAppear { instruction = reply.instruction ?? "" }
     }
 
@@ -625,7 +680,7 @@ private struct ReplyCard: View {
                     .scaledToFill()
                     .frame(width: 38, height: 38)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.white.opacity(0.15)))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.ink.opacity(0.15)))
             } else {
                 Image(systemName: "text.bubble")
                     .font(.system(size: 12, weight: .medium))
@@ -637,7 +692,7 @@ private struct ReplyCard: View {
                 Text(reply.isScreenshot ? tr("截屏回复", "Screenshot Reply") : tr("回复建议", "Suggested Reply")).font(.system(size: 12.5, weight: .semibold))
                 Text("\(reply.target) · \(reply.createdAt.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute()))")
                     .font(.system(size: 10.5))
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(theme.ink.opacity(0.45))
             }
             Spacer(minLength: 0)
             if reply.isStreaming {
@@ -663,11 +718,11 @@ private struct ReplyCard: View {
                             Text(section.title)
                                 .font(.system(size: 10.5, weight: .semibold))
                                 .tracking(0.5)
-                                .foregroundStyle(.white.opacity(0.5))
+                                .foregroundStyle(theme.ink.opacity(0.5))
                         }
                         Text(section.body)
                             .font(.system(size: 12.5))
-                            .foregroundStyle(.white.opacity(0.82))
+                            .foregroundStyle(theme.ink.opacity(0.82))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -689,13 +744,13 @@ private struct ReplyCard: View {
                 Button { session.copy(section, of: reply.id) } label: {
                     Label(copied ? tr("已复制", "Copied") : tr("复制", "Copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
                         .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(copied ? theme.accent : .white.opacity(0.7))
+                        .foregroundStyle(copied ? theme.accent : theme.ink.opacity(0.7))
                 }
                 .buttonStyle(.plain)
             }
             Text(section.body)
                 .font(.system(size: 14))
-                .foregroundStyle(.white.opacity(0.96))
+                .foregroundStyle(theme.ink.opacity(0.96))
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -714,7 +769,7 @@ private struct ReplyCard: View {
                 .font(.system(size: 12))
                 .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.white.opacity(0.07)))
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.ink.opacity(0.07)))
                 .onSubmit { session.regenerateScreenshotReply(reply.id, instruction: instruction) }
             PillButton(title: tr("重新生成", "Regenerate"), symbol: "arrow.clockwise", theme: theme) {
                 session.regenerateScreenshotReply(reply.id, instruction: instruction)
@@ -740,13 +795,21 @@ private struct AppearancePopover: View {
                                 .fill(theme.accent)
                                 .frame(width: 26, height: 26)
                                 .overlay(Circle().strokeBorder(theme.tint, lineWidth: 5).opacity(0.9))
-                                .overlay(Circle().strokeBorder(settings.value.theme == id ? Color.white : .clear, lineWidth: 2)
+                                .overlay(Circle().strokeBorder(settings.value.theme == id ? Color.primary : .clear, lineWidth: 2)
                                     .padding(-3))
                             Text(id.label.components(separatedBy: CharacterSet(charactersIn: "：:")).first ?? "").font(.system(size: 10.5))
                         }
                     }
                     .buttonStyle(.plain)
                 }
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Label(tr("字色", "Text Color"), systemImage: "character").font(.system(size: 11.5))
+                Picker("", selection: $settings.value.overlayTextColor) {
+                    ForEach(OverlayTextColor.allCases) { Text($0.label).tag($0) }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
             }
             VStack(alignment: .leading, spacing: 4) {
                 HStack {

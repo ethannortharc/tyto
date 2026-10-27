@@ -16,7 +16,8 @@ enum Highlighter {
 
     static func text(_ text: String, keywords: [String], theme: OverlayTheme, base: Color,
                      entities: Bool = true) -> AttributedString {
-        let key = "\(theme.id.rawValue)|\(entities)|\(keywords.joined(separator: ","))|\(text)"
+        // 白字、黑字的高亮颜色不同，底色也算进去
+        let key = "\(theme.id.rawValue)|\(theme.light)|\(base)|\(entities)|\(keywords.joined(separator: ","))|\(text)"
         if let cached = cache[key] { return cached }
         let result = build(text, keywords: keywords, theme: theme, base: base, entities: entities)
         if cache.count > 600 { cache.removeAll() }

@@ -125,6 +125,9 @@ struct AppSettings: Codable, Equatable {
 
     // 悬浮窗
     var theme: ThemeID = .graphite
+    /// 字色：自动按悬浮窗后面画面的明暗选白字或黑字，也可以固定
+    var overlayTextColor: OverlayTextColor = .auto
+    var transcriptStyle: TranscriptStyle = .avatar
     /// 底色浓度：0 是完全透明（连玻璃都没有），往右先出现玻璃，再加深底色
     var overlayOpacity = 0.45
     var fontSize = 14.0
@@ -270,6 +273,38 @@ enum IconStyle: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .graphite: tr("石墨", "Graphite")
         case .muted: tr("彩色", "Color")
+        }
+    }
+}
+
+/// 悬浮窗的字色。黑字时玻璃和底色也换成浅色
+enum OverlayTextColor: String, Codable, CaseIterable, Identifiable, Sendable {
+    case auto
+    case white
+    case black
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .auto: tr("自动", "Auto")
+        case .white: tr("白字", "White")
+        case .black: tr("黑字", "Black")
+        }
+    }
+}
+
+/// 字幕每一行的样式
+enum TranscriptStyle: String, Codable, CaseIterable, Identifiable, Sendable {
+    /// 说话人头像 + 名字，正文和名字对齐
+    case avatar
+    /// 左边一条说话人颜色的细线
+    case bar
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .avatar: tr("头像", "Avatar")
+        case .bar: tr("细线", "Line")
         }
     }
 }

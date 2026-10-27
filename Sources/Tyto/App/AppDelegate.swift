@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private lazy var session = SessionModel(settings: settings, skills: skills)
     private let overlayState = OverlayState()
     private var overlay: OverlayPanel?
+    private var backdropProbe: BackdropProbe?
     private var mainWindow: NSWindow?
     private var statusItem: NSStatusItem?
     private let hotKeys = HotKeys()
@@ -33,6 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                                        actions: actions))
         panel.orderFrontRegardless()
         overlay = panel
+        backdropProbe = BackdropProbe(panel: panel, settings: settings, state: overlayState)
+        backdropProbe?.start()
         overlayState.$clickThrough
             .sink { [weak self] _ in self?.updateClickThrough() }
             .store(in: &subscriptions)

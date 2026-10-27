@@ -20,6 +20,8 @@ enum ThemeID: String, Codable, CaseIterable, Identifiable {
 
 struct OverlayTheme {
     let id: ThemeID
+    /// 浅色：悬浮窗盖在亮的画面上时，用浅色玻璃配黑字
+    var light = false
     /// 玻璃的底色
     let tint: Color
     /// 唯一的强调色：主按钮、选中、回复卡片的竖条
@@ -38,11 +40,62 @@ struct OverlayTheme {
     let keyword: Color
     let translation: Color
 
+    /// 正文颜色；次要的文字、图标、分隔线都用它加透明度
+    var ink: Color { light ? Self.rgb(0x1C1B1A) : .white }
+    /// 文字外面那圈细阴影：深色时是黑影，浅色时是白晕
+    var halo: Color { light ? .white : .black }
+
     private static func rgb(_ hex: UInt32) -> Color {
         Color(red: Double(hex >> 16 & 0xFF) / 255, green: Double(hex >> 8 & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
     }
 
-    static func of(_ id: ThemeID) -> OverlayTheme {
+    static func of(_ id: ThemeID, light: Bool = false) -> OverlayTheme {
+        light ? lightVariant(id) : dark(id)
+    }
+
+    /// 浅色版：底是纸一样的浅色，强调色和说话人颜色都压深，在白底上也够对比度
+    private static func lightVariant(_ id: ThemeID) -> OverlayTheme {
+        switch id {
+        case .graphite:
+            OverlayTheme(
+                id: id, light: true,
+                tint: rgb(0xF4F2EE),
+                accent: rgb(0x2B2A28),
+                onAccent: rgb(0xF4F2EE),
+                remote: [rgb(0x3D6584), rgb(0x2E6C64), rgb(0x76663A)],
+                local: [rgb(0x4A6E3E), rgb(0x9C4F37), rgb(0x86661F)],
+                number: rgb(0x9A5F14),
+                entity: rgb(0x38566F),
+                keyword: rgb(0x1C1B1A),
+                translation: rgb(0x5C5954))
+        case .celadon:
+            OverlayTheme(
+                id: id, light: true,
+                tint: rgb(0xEEF4F1),
+                accent: rgb(0x2B6B55),
+                onAccent: rgb(0xF1F7F4),
+                remote: [rgb(0x2E6177), rgb(0x2B6B55), rgb(0x6C6842)],
+                local: [rgb(0x87611F), rgb(0x974F43), rgb(0x526D37)],
+                number: rgb(0x956515),
+                entity: rgb(0x2E6177),
+                keyword: rgb(0x2B6B55),
+                translation: rgb(0x55625C))
+        case .ochre:
+            OverlayTheme(
+                id: id, light: true,
+                tint: rgb(0xF6EFE8),
+                accent: rgb(0xB0561F),
+                onAccent: rgb(0xFFF7EF),
+                remote: [rgb(0x43617A), rgb(0x4B6B41), rgb(0x776541)],
+                local: [rgb(0xA5501F), rgb(0x86661F), rgb(0x914C4C)],
+                number: rgb(0x955F14),
+                entity: rgb(0x43617A),
+                keyword: rgb(0xB0561F),
+                translation: rgb(0x675A4D))
+        }
+    }
+
+    private static func dark(_ id: ThemeID) -> OverlayTheme {
         switch id {
         case .graphite:
             OverlayTheme(
@@ -122,6 +175,9 @@ struct GlassBackground: View {
             }
             shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.24 * max(0.45, glassAmount)), .white.opacity(0.05)],
                                               startPoint: .top, endPoint: .bottom), lineWidth: 1)
+            if theme.light {
+                shape.strokeBorder(Color.black.opacity(0.10), lineWidth: 0.5)
+            }
         }
     }
 

@@ -1179,6 +1179,9 @@ private struct OllamaCatalog: View {
 private struct AppearancePage: View {
     @ObservedObject var settings: SettingsStore
     @State private var preview: SessionModel?
+    /// 预览的背景换成白底页面，看黑字的效果
+    @State private var previewOnLight = false
+    @StateObject private var previewState = OverlayState()
 
     var body: some View {
         Form {
@@ -1220,6 +1223,25 @@ private struct AppearancePage: View {
                             .foregroundStyle(.secondary).frame(width: 34, alignment: .trailing)
                     }
                 }
+                Row(symbol: "character", title: tr("字色", "Text Color"),
+                    detail: tr("自动：悬浮窗后面的画面亮时换黑字配浅色玻璃，暗时用白字（要录屏权限，只看亮度，不存图）",
+                               "Auto: black text on light glass over bright content, white otherwise (needs Screen Recording; reads brightness only, saves nothing)")) {
+                    Picker("", selection: $settings.value.overlayTextColor) {
+                        ForEach(OverlayTextColor.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 190)
+                }
+                Row(symbol: "text.alignleft", title: tr("字幕样式", "Caption Style"),
+                    detail: tr("头像：名字前一个圆形头像；细线：左边一条说话人颜色的线", "Avatar: a round badge before the name; Line: a speaker-colored line on the left")) {
+                    Picker("", selection: $settings.value.transcriptStyle) {
+                        ForEach(TranscriptStyle.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 140)
+                }
                 Row(symbol: "textformat.size", title: tr("字号", "Font Size")) {
                     HStack(spacing: 8) {
                         Image(systemName: "textformat.size.smaller").foregroundStyle(.secondary)
@@ -1232,9 +1254,9 @@ private struct AppearancePage: View {
             }
             Section {
                 ZStack {
-                    SampleBackdrop()
+                    SampleBackdrop(light: previewOnLight)
                     if let preview {
-                        OverlayView(session: preview, settings: settings, ui: OverlayState())
+                        OverlayView(session: preview, settings: settings, ui: previewState)
                             .frame(width: 440, height: 470)
                             .allowsHitTesting(false)
                     }
@@ -1242,11 +1264,22 @@ private struct AppearancePage: View {
                 .frame(height: 510)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             } header: {
-                Text(tr("预览（背景是模拟的会议画面）", "Preview (simulated meeting background)"))
+                HStack {
+                    Text(tr("预览", "Preview"))
+                    Spacer()
+                    Picker("", selection: $previewOnLight) {
+                        Text(tr("会议画面", "Meeting")).tag(false)
+                        Text(tr("白底文档", "White Page")).tag(true)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 170)
+                }
             }
         }
         .formStyle(.grouped)
         .onAppear { if preview == nil { preview = SampleData.session(settings: settings) } }
+        .onChange(of: previewOnLight, initial: true) { previewState.backdropIsLight = previewOnLight }
     }
 }
 

@@ -58,7 +58,7 @@ The *Permissions & About* page shows each permission's status with a button to t
 - **Before a meeting**: in *Session*, write a few lines of background (purpose, attendees, your role, terms) and keywords, and tick the skills to use. Replies take all of it into account.
 - **During the meeting**: ⌃⌥L starts listening. Click a line to select it, then *Reply* or ⌃⌥R.
 - **Answering messages**: press ⌃⌥S in Teams / Slack / Mail; a few seconds later the reply is on your clipboard — ⌘V and send. Want it different? Type an instruction under the reply ("decline politely", "in Chinese") and *Regenerate*.
-- **Appearance**: the palette icon on the overlay changes theme, background and font size. Drag the edges to resize; *Reset size and position* in the menu restores the default — about 38% of the screen height and 26% of its width, on the right, clear of the meeting video.
+- **Appearance**: the palette icon on the overlay changes theme, text color, background and font size. Text color defaults to *Auto*: black text on light glass over white documents and web pages, white text over darker things like meeting video; you can also fix it to white or black. Captions come in two styles, *Avatar* and *Line* (Settings → Appearance). Drag the edges to resize; *Reset size and position* in the menu restores the default — about 38% of the screen height and 26% of its width, on the right, clear of the meeting video.
 
 ## Keyboard shortcuts
 
@@ -148,6 +148,7 @@ Measured on an M4 Pro: 1.4 s for a chat screenshot, about 5 s for a dense mixed 
 |---|---|
 | Meeting audio | Nowhere with Apple on-device recognition; to your chosen service with cloud recognition |
 | Caption text | Nowhere with Apple translation; to your chosen model for replies and model translation |
+| What's behind the overlay | With *Auto* text color, every 2.5 s that area is scaled to 16×16 to get its average brightness, on your Mac only, never saved; not read when the text color is fixed |
 | Screenshots | Depends on the reading mode above; nowhere with a local model or OCR only |
 | Keys | Only in this Mac's keychain |
 | Transcripts | Only in `~/Library/Application Support/Tyto/sessions/` |
@@ -179,7 +180,8 @@ Check each part without a meeting (arguments to `build/Tyto.app/Contents/MacOS/T
 | `--selftest-settings` | Print current settings (read only) |
 | `--selftest-echo` / `--selftest-deepgram` | Echo rule; Deepgram message parsing |
 | `--render-preview <dir>` / `--render-settings <dir>` | Draw the overlay / settings pages to images (no screen capture) |
-| `--selftest-glass <dir>` | Real glass rendering (captures only Tyto's own windows) |
+| `--selftest-glass <dir> [--light] [--auto]` | Real glass rendering (captures only Tyto's own windows); `--light` over a white page, `--auto` with the automatic text color |
+| `--selftest-backdrop` | Auto text color: measure a white page and a meeting backdrop, check white vs. black |
 
 Add `--settings-json '{...}'` to any of them to override settings without saving. The run log is at `~/Library/Logs/Tyto.log`.
 
