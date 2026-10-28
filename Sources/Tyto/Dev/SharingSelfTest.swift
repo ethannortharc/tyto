@@ -107,16 +107,20 @@ extension SelfTest {
             menu.popUp(positioning: nil, at: NSPoint(x: 520, y: 520), in: backdrop.contentView)
             return shot.image
         }
+        // 截图没拿到（刚解锁时截屏服务可能还没响应）两项都算没通过，不能当成"截不到"或"截得到"
+        let noShot = "没截到图（截屏服务没响应，再跑一次）"
         let menuShot = menuCapture()
         save(menuShot, "2-menu")
         let menuDiff = difference(baseline, menuShot)
-        check("打开的下拉菜单截不到", menuDiff.changed < 50, "和空白比有 \(menuDiff.changed) 个像素不同")
+        check("打开的下拉菜单截不到", menuShot != nil && menuDiff.changed < 50,
+              menuShot == nil ? noShot : "和空白比有 \(menuDiff.changed) 个像素不同")
         SharingGuard.paused = true
         let menuControl = menuCapture()
         SharingGuard.paused = false
         save(menuControl, "2-menu-control")
         let menuVisible = difference(baseline, menuControl)
-        check("对照：不设保护时截得到菜单", menuVisible.changed > 2_000, "和空白比有 \(menuVisible.changed) 个像素不同")
+        check("对照：不设保护时截得到菜单", menuControl != nil && menuVisible.changed > 2_000,
+              menuControl == nil ? noShot : "和空白比有 \(menuVisible.changed) 个像素不同")
 
         // 4. 对照：暂停 SharingGuard，提词器设成可以被截，必须截得到
         SharingGuard.paused = true
