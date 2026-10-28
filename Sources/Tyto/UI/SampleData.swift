@@ -57,6 +57,37 @@ enum SampleData {
         return reply
     }
 
+    /// 会议记录页的示例：今天、昨天、上周各一场
+    static func writeRecords(to folder: URL) {
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let base = rows()
+        let meetings: [(String, Int, Int)] = [
+            (tr("Northwind 方案评审", "Northwind Proposal Review"), 0, 6),
+            (tr("周会", "Weekly Sync"), -1, 3),
+            (tr("Contoso 客户访谈", "Contoso Customer Interview"), -7, 4),
+        ]
+        for (title, days, count) in meetings {
+            let shift = TimeInterval(days * 86400)
+            let rows = base.prefix(count).map { row in
+                var row = Utterance(copying: row, startedAt: row.startedAt.addingTimeInterval(shift),
+                                    updatedAt: row.updatedAt.addingTimeInterval(shift))
+                row.isClosed = true
+                if row.text.isEmpty || !row.pending.isEmpty {
+                    row.text = TextJoin.join(row.text, row.pending)
+                    row.pending = ""
+                }
+                return row
+            }
+            let id = UUID()
+            let record = MeetingRecord(id: id, title: title, context: days == 0 ? tr("Northwind 的上线时间和预算。", "Northwind launch date and budget.") : "",
+                                       activeSkillIDs: [], speakerNames: ["local:1": tr("我", "Me")], rows: Array(rows),
+                                       replies: days == 0 ? [meetingReply(answering: base)] : [])
+            if let data = try? JSONEncoder().encode(record) {
+                try? data.write(to: folder.appending(path: MeetingRecord.fileName(id: id, startedAt: record.startedAt)))
+            }
+        }
+    }
+
     /// 一个填好示例的会话（不读写文件）
     static func session(settings: SettingsStore) -> SessionModel {
         let session = SessionModel(settings: settings, skills: SkillStore(), persists: false)

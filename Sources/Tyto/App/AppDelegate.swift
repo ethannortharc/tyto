@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private let settings = SettingsStore()
     private lazy var skills = SkillStore()
     private lazy var session = SessionModel(settings: settings, skills: skills)
+    private lazy var records = MeetingRecords()
     private let overlayState = OverlayState()
     private var overlay: OverlayPanel?
     private var backdropProbe: BackdropProbe?
@@ -44,7 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             hide: { [weak self] in self?.toggleOverlay() },
             quit: { NSApp.terminate(nil) },
             resetSize: { [weak self] in self?.overlay?.resetFrame() },
-            openTranslation: { [weak self] in self?.openMainWindow(page: .translation) })
+            openTranslation: { [weak self] in self?.openMainWindow(page: .translation) },
+            openRecords: { [weak self] in self?.openMainWindow(page: .records) })
         let panel = OverlayPanel(rootView: OverlayView(session: session, settings: settings, ui: overlayState,
                                                        actions: actions))
         panel.orderFrontRegardless()
@@ -137,7 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if let page, let window = mainWindow {
             // 窗口里当前是哪一页是 MainView 自己的状态，要跳到指定的页就整个换掉
             window.contentView = NSHostingView(rootView: MainView(session: session, settings: settings, skills: skills,
-                                                                  updater: updater, initialPage: page))
+                                                                  records: records, updater: updater, initialPage: page))
         }
         if mainWindow == nil {
             let window = NSWindow(
@@ -151,7 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             // 会议背景和记录也不能被共享出去
             window.sharingType = .none
             window.contentView = NSHostingView(rootView: MainView(session: session, settings: settings, skills: skills,
-                                                                  updater: updater, initialPage: page ?? .session))
+                                                                  records: records, updater: updater, initialPage: page ?? .session))
             window.center()
             window.setFrameAutosaveName("TytoMain")
             mainWindow = window
@@ -350,6 +352,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         menu.addItem(clickThrough)
         menu.addItem(.separator())
 
+        let recordsItem = item(tr("会议记录", "Meeting Records"), "archivebox", nil)
+        let recordsMenu = NSMenu()
+        recordsMenu.autoenablesItems = false
+        let save = item(session.recordFile == nil ? tr("保存到会议记录", "Save to Meeting Records") : tr("已在会议记录里，自动保存", "In Meeting Records, saved automatically"),
+                        session.recordFile == nil ? "tray.and.arrow.down" : "checkmark.circle", #selector(saveRecordAction))
+        save.isEnabled = !session.isEmpty && session.recordFile == nil
+        recordsMenu.addItem(save)
+        let clear = item(tr("清空，开始新会议", "Clear, New Meeting"), "plus.bubble", #selector(clearSessionAction))
+        clear.isEnabled = !session.isEmpty
+        recordsMenu.addItem(clear)
+        let export = item(tr("导出记录…", "Export Transcript…"), "square.and.arrow.up", #selector(exportSessionAction))
+        export.isEnabled = !session.isEmpty
+        recordsMenu.addItem(export)
+        recordsMenu.addItem(.separator())
+        recordsMenu.addItem(item(tr("查看会议记录…", "Show Meeting Records…"), "archivebox", #selector(openRecordsAction)))
+        recordsItem.submenu = recordsMenu
+        menu.addItem(recordsItem)
+        menu.addItem(.separator())
+
         let settingsItem = item(tr("会话与设置…", "Session & Settings…"), "gearshape", #selector(openMainAction))
         settingsItem.keyEquivalent = ","
         settingsItem.keyEquivalentModifierMask = [.command]
@@ -411,6 +432,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     @objc private func toggleSidecarAction() { settings.value.showReplyPanel.toggle() }
     @objc private func togglePrompterAction() { settings.value.showPrompter.toggle() }
     @objc private func openMainAction() { openMainWindow() }
+    @objc private func openRecordsAction() { openMainWindow(page: .records) }
+    @objc private func saveRecordAction() { session.saveToRecords() }
+    @objc private func clearSessionAction() { MeetingCommands.clear(session) }
+    @objc private func exportSessionAction() { MeetingCommands.export(session.snapshot()) }
     @objc private func openNotesAction() {
         settings.value.showPrompter = true
         prompter.choose()
@@ -467,6 +492,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         add(app, titled: "Tyto", to: main)
 
         let file = NSMenu(title: tr("文件", "File"))
+        file.addItem(command(tr("保存到会议记录", "Save to Meeting Records"), #selector(saveRecordAction), "s", target: self))
+        file.addItem(command(tr("清空，开始新会议", "Clear, New Meeting"), #selector(clearSessionAction), "n", target: self))
+        file.addItem(command(tr("导出记录…", "Export Transcript…"), #selector(exportSessionAction), "e",
+                             modifiers: [.command, .shift], target: self))
+        file.addItem(command(tr("会议记录", "Meeting Records"), #selector(openRecordsAction), "y", target: self))
+        file.addItem(.separator())
         file.addItem(command(tr("打开提词材料…", "Open Notes…"), #selector(openNotesAction), "o", target: self))
         file.addItem(.separator())
         file.addItem(command(tr("关闭窗口", "Close Window"), #selector(NSWindow.performClose(_:)), "w"))
@@ -514,6 +545,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         guard menuItem.menu?.supermenu === NSApp.mainMenu else { return true }
         switch menuItem.action {
+        case #selector(saveRecordAction), #selector(clearSessionAction), #selector(exportSessionAction):
+            return !session.isEmpty
         case #selector(toggleOverlayAction): menuItem.state = overlay?.isVisible == true ? .on : .off
         case #selector(toggleSidecarAction): menuItem.state = settings.value.showReplyPanel ? .on : .off
         case #selector(togglePrompterAction): menuItem.state = settings.value.showPrompter ? .on : .off

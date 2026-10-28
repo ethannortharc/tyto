@@ -25,6 +25,7 @@ import Foundation
 ///   Tyto --render-settings <文件夹>                                        把设置窗口每一页画成图片（窗口建在屏幕外，不截屏）
 ///   Tyto --render-preview <文件夹>                                         用示例数据把悬浮窗画成图片（不碰屏幕）
 ///   Tyto --selftest-followup                                              回复建议之后"我实际说的"：找哪几句、判照着说/改了说法/没回
+///   Tyto --selftest-records                                               会议记录：保存、清空、接着记、删除（在临时文件夹里）
 ///   Tyto --selftest-backdrop                                              字色自动：在屏幕上放白底页面和会议画面，量亮度，看选白字还是黑字
 enum SelfTest {
     /// 自测期间要一直活着的对象
@@ -137,6 +138,10 @@ enum SelfTest {
         }
         if arguments.contains("--selftest-followup") {
             exit(followUp())
+        }
+        if arguments.contains("--selftest-records") {
+            Task { exit(await records()) }
+            return true
         }
         if arguments.contains("--selftest-backdrop") {
             Task { exit(await backdrop()) }
@@ -728,6 +733,11 @@ enum SelfTest {
         settings.value = current
         let session = SampleData.session(settings: settings)
         let skills = SkillStore()
+        // 会议记录页用几场示例会议（临时文件夹，画完删掉）
+        let recordsFolder = FileManager.default.temporaryDirectory.appending(path: "tyto-render-records-\(UUID().uuidString.prefix(8))")
+        SampleData.writeRecords(to: recordsFolder)
+        defer { try? FileManager.default.removeItem(at: recordsFolder) }
+        let records = MeetingRecords(folder: recordsFolder)
         let folderURL = URL(filePath: folder)
         try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
         NSApp.setActivationPolicy(.accessory)
@@ -738,7 +748,8 @@ enum SelfTest {
             window.sharingType = .none
             window.titlebarAppearsTransparent = true
             window.appearance = NSAppearance(named: .darkAqua)
-            let host = NSHostingView(rootView: MainView(session: session, settings: settings, skills: skills, initialPage: page))
+            let host = NSHostingView(rootView: MainView(session: session, settings: settings, skills: skills, records: records,
+                                                        initialPage: page))
             window.contentView = host
             window.orderFrontRegardless()
             RunLoop.current.run(until: Date().addingTimeInterval(0.8))

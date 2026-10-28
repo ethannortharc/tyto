@@ -8,15 +8,17 @@ struct MainView: View {
     @ObservedObject var session: SessionModel
     @ObservedObject var settings: SettingsStore
     @ObservedObject var skills: SkillStore
+    let records: MeetingRecords
     /// 自动更新；画预览图时没有
     let updater: Updater?
     @State private var page: SettingsPage?
 
-    init(session: SessionModel, settings: SettingsStore, skills: SkillStore, updater: Updater? = nil,
-         initialPage: SettingsPage = .session) {
+    init(session: SessionModel, settings: SettingsStore, skills: SkillStore, records: MeetingRecords,
+         updater: Updater? = nil, initialPage: SettingsPage = .session) {
         self.session = session
         self.settings = settings
         self.skills = skills
+        self.records = records
         self.updater = updater
         _page = State(initialValue: initialPage)
     }
@@ -55,6 +57,7 @@ struct MainView: View {
     private func pageView(_ current: SettingsPage) -> some View {
         switch current {
         case .session: SessionPage(session: session, settings: settings, skills: skills, page: $page)
+        case .records: RecordsPage(records: records, session: session)
         case .skills: SkillsPage(skills: skills)
         case .listen: ListenPage(settings: settings)
         case .translation: TranslationPage(settings: settings, session: session)
@@ -69,13 +72,14 @@ struct MainView: View {
 }
 
 enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
-    case session, skills, listen, translation, screenshot, general, services, appearance, shortcuts, permissions
+    case session, records, skills, listen, translation, screenshot, general, services, appearance, shortcuts, permissions
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .session: tr("会话", "Session")
+        case .records: tr("会议记录", "Meeting Records")
         case .skills: tr("技能", "Skills")
         case .listen: tr("听写", "Listening")
         case .translation: tr("翻译", "Translation")
@@ -91,6 +95,7 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
     var subtitle: String {
         switch self {
         case .session: tr("这场会议的背景、关键词、技能和说话人。回复时都会带上。", "Context, keywords, skills and speakers for this meeting. All of it goes into replies.")
+        case .records: tr("存下来的会议：查看、导出、接着记。", "Saved meetings: read, export, or continue them.")
         case .skills: tr("写给大模型的做法说明，决定回复的语气和套路。", "Instructions for the model that set the tone and approach of replies.")
         case .listen: tr("听哪些声音，怎么把声音变成文字。", "Which sounds to listen to, and how to turn them into text.")
         case .translation: tr("每句话下面显示译文，悬浮窗顶部一键开关。", "Shows a translation under each line. One-click toggle at the top of the overlay.")
@@ -106,6 +111,7 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
     var symbol: String {
         switch self {
         case .session: "person.2.wave.2.fill"
+        case .records: "archivebox.fill"
         case .skills: "book.closed.fill"
         case .listen: "waveform"
         case .translation: "character.bubble.fill"
@@ -122,6 +128,7 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
     private var muted: UInt32 {
         switch self {
         case .session: 0x5E7891
+        case .records: 0x7B6E8E
         case .skills: 0x9C7A4E
         case .listen: 0xA8625A
         case .translation: 0x6B8868
@@ -139,7 +146,7 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
     }
 
     static var groups: [(title: String, pages: [SettingsPage])] { [
-        (tr("会议", "Meeting"), [.session, .skills]),
+        (tr("会议", "Meeting"), [.session, .records, .skills]),
         (tr("功能", "Features"), [.listen, .translation, .screenshot]),
         (tr("设置", "Settings"), [.general, .services, .appearance, .shortcuts, .permissions]),
     ] }
@@ -304,6 +311,43 @@ private struct SessionPage: View {
     var body: some View {
         Form {
             Section {
+                HStack(spacing: 10) {
+                    Button {
+                        session.toggle()
+                    } label: {
+                        Label(session.isRunning ? tr("停止听", "Stop Listening") : tr("开始听", "Start Listening"),
+                              systemImage: session.isRunning ? "stop.circle.fill" : "record.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(session.isStarting)
+                    Button(action: session.saveToRecords) {
+                        Label(session.recordFile == nil ? tr("保存到会议记录", "Save to Meeting Records") : tr("已在会议记录里", "In Meeting Records"),
+                              systemImage: session.recordFile == nil ? "tray.and.arrow.down" : "checkmark.circle")
+                    }
+                    .disabled(session.isEmpty || session.recordFile != nil)
+                    .help(session.recordFile == nil ? tr("存进会议记录；之后的内容会自动存进去", "Save to Meeting Records; later lines are saved automatically")
+                                                     : tr("这场已经在会议记录里，新内容自动存进去", "This meeting is in Meeting Records; new lines are saved automatically"))
+                    Button { MeetingCommands.export(session.snapshot()) } label: {
+                        Label(tr("导出…", "Export…"), systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(session.isEmpty)
+                    Spacer()
+                    Button { MeetingCommands.clear(session) } label: {
+                        Label(tr("清空，开始新会议", "Clear, New Meeting"), systemImage: "plus.bubble")
+                    }
+                    .disabled(session.isEmpty)
+                    .help(tr("清掉字幕和回复，开始新的一场；背景、关键词和技能保留", "Clears the transcript and replies for a new meeting; context, keywords and skills are kept"))
+                }
+            } footer: {
+                HStack(spacing: 4) {
+                    Text(tr("存下来的会议在", "Saved meetings are under"))
+                    Button(tr("会议记录", "Meeting Records")) { page = .records }.buttonStyle(.plain).foregroundStyle(Brand.accent)
+                    Text(tr("里；没保存的这场也会自动留着，直到清空。", "; the current meeting is also kept until you clear it."))
+                }
+                .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
                 Row(symbol: "textformat", title: tr("会议名称", "Meeting Name")) {
                     TextField("", text: $session.title, prompt: Text(tr("新会议", "New Meeting"))).frame(maxWidth: 280)
                 }
@@ -397,38 +441,8 @@ private struct SessionPage: View {
             } header: {
                 Text(tr("回复", "Replies"))
             }
-
-            Section {
-                HStack(spacing: 10) {
-                    Button {
-                        session.toggle()
-                    } label: {
-                        Label(session.isRunning ? tr("停止听", "Stop Listening") : tr("开始听", "Start Listening"),
-                              systemImage: session.isRunning ? "stop.circle.fill" : "record.circle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(session.isStarting)
-                    Button(action: export) { Label(tr("导出记录", "Export Transcript"), systemImage: "square.and.arrow.up") }
-                        .disabled(session.rows.isEmpty)
-                    Spacer()
-                    Button { Task { await session.newSession() } } label: {
-                        Label(tr("开始新会议", "New Meeting"), systemImage: "plus.bubble")
-                    }
-                    .help(tr("当前记录存档后清空；背景、关键词和技能保留", "Archives the current transcript and clears it; context, keywords and skills are kept"))
-                }
-            } footer: {
-                Text(tr("记录自动保存在 ~/Library/Application Support/Tyto/sessions/", "Transcripts are saved automatically in ~/Library/Application Support/Tyto/sessions/")).font(.caption).foregroundStyle(.secondary)
-            }
         }
         .formStyle(.grouped)
-    }
-
-    private func export() {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
-        panel.nameFieldStringValue = "\(session.title).md"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? session.markdown().write(to: url, atomically: true, encoding: .utf8)
     }
 }
 
@@ -1550,7 +1564,7 @@ private struct PermissionsPage: View {
             }
 
             Section {
-                folderRow(tr("会话记录", "Session Transcripts"), symbol: "tray.full.fill", url: SessionModel.folder)
+                folderRow(tr("会话记录", "Session Transcripts"), symbol: "tray.full.fill", url: SessionModel.defaultFolder)
                 folderRow(tr("技能", "Skills"), symbol: "book.closed", url: SkillStore.folder)
                 folderRow(tr("运行日志", "Run Log"), symbol: "doc.text.magnifyingglass", url: URL.libraryDirectory.appending(path: "Logs/Tyto.log"))
             } header: {

@@ -25,6 +25,18 @@ final class SessionModel: ObservableObject {
     /// 提示是"翻译语言包没下载"时，提示条上多一个"去下载"按钮
     @Published var noticeOpensTranslation = false
     @Published private(set) var levels: [Channel: Float] = [:]
+    /// 这场会议的编号；存进会议记录、以后接着记都靠它认出是同一场
+    @Published private(set) var sessionID = UUID()
+    /// 这场存在会议记录的哪个文件里；nil 是还没保存过。保存过以后，每次自动保存也更新那个文件
+    @Published private(set) var recordFile: String?
+    /// 一闪而过的确认（"已保存到会议记录"），几秒后自己消失
+    @Published private(set) var toast: Toast?
+
+    struct Toast: Equatable {
+        let text: String
+        /// false 是没做成（比如还没内容可存）
+        var ok = true
+    }
 
     let settings: SettingsStore
     let skills: SkillStore
@@ -55,11 +67,15 @@ final class SessionModel: ObservableObject {
 
     /// false 时不读写会话文件（预览、自测用，不碰真实记录）
     private let persists: Bool
+    /// current.json 和会议记录放在哪（自测换成临时文件夹）
+    let folder: URL
+    private var toastTask: Task<Void, Never>?
 
-    init(settings: SettingsStore, skills: SkillStore, persists: Bool = true) {
+    init(settings: SettingsStore, skills: SkillStore, persists: Bool = true, folder: URL = SessionModel.defaultFolder) {
         self.settings = settings
         self.skills = skills
         self.persists = persists
+        self.folder = folder
     }
 
     // MARK: - 开始、停止
@@ -432,10 +448,7 @@ final class SessionModel: ObservableObject {
 
     /// 算作"我"的本地说话人：改名成「我」/ Me 的；一个都没有时是整个本地麦克风
     var meSpeakerKeys: Set<String> {
-        Set(speakerNames.filter { key, name in
-            key.hasPrefix("\(Channel.local.rawValue):")
-                && ["我", "me", "myself", "自己"].contains(name.trimmingCharacters(in: .whitespaces).lowercased())
-        }.keys)
+        MeetingRecord(title: "", context: "", activeSkillIDs: [], speakerNames: speakerNames, rows: [], replies: []).meSpeakerKeys
     }
 
     /// 这条回复建议之后我实际说了什么
@@ -594,7 +607,7 @@ final class SessionModel: ObservableObject {
     }
 
     func defaultSpeakerLabel(_ row: Utterance) -> String {
-        row.speaker.map { tr("\(row.channel.label)·说话人\($0)", "\(row.channel.label) · Speaker \($0)") } ?? row.channel.label
+        MeetingRecord.defaultSpeakerLabel(row)
     }
 
     func rename(_ key: String, to name: String) {
@@ -622,24 +635,35 @@ final class SessionModel: ObservableObject {
         self.selection = selection
     }
 
-    // MARK: - 保存、新会议、导出
+    // MARK: - 保存、会议记录、导出
 
-    private struct SessionFile: Codable {
-        var title: String
-        var context: String
-        var activeSkillIDs: [String]
-        var speakerNames: [String: String]
-        var rows: [Utterance]
-        var replies: [Reply]
-        var keywords: String?
+    static var defaultFolder: URL { URL.applicationSupportDirectory.appending(path: "Tyto/sessions") }
+    nonisolated static let currentFileName = "current.json"
+    private var currentFile: URL { folder.appending(path: Self.currentFileName) }
+
+    /// 这场会议现在的样子（只含说完的句子）
+    func snapshot() -> MeetingRecord {
+        MeetingRecord(id: sessionID, title: title, context: context, activeSkillIDs: activeSkillIDs.sorted(),
+                      speakerNames: speakerNames, rows: rows.filter(\.isClosed), replies: replies, keywords: keywords,
+                      recordFile: recordFile)
     }
 
-    static var folder: URL { URL.applicationSupportDirectory.appending(path: "Tyto/sessions") }
-    private static var currentFile: URL { folder.appending(path: "current.json") }
+    var isEmpty: Bool { rows.isEmpty && replies.isEmpty }
+    /// 有内容但还没存进会议记录：清空、打开别的会议之前要问一下
+    var hasUnsavedContent: Bool { recordFile == nil && !isEmpty }
 
     func load() {
-        guard let data = try? Data(contentsOf: Self.currentFile),
-              let file = try? JSONDecoder().decode(SessionFile.self, from: data) else { return }
+        guard let data = try? Data(contentsOf: currentFile),
+              let file = try? JSONDecoder().decode(MeetingRecord.self, from: data) else { return }
+        apply(file)
+        // 会议记录里那个文件被删了（比如在访达里）：当作没保存过
+        if let name = file.recordFile, FileManager.default.fileExists(atPath: folder.appending(path: name).path) {
+            recordFile = name
+        }
+    }
+
+    private func apply(_ file: MeetingRecord) {
+        sessionID = file.id ?? UUID()
         title = file.title
         context = file.context
         activeSkillIDs = Set(file.activeSkillIDs)
@@ -656,6 +680,9 @@ final class SessionModel: ObservableObject {
             reply.status = nil
             return reply
         }
+        selection = []
+        screenshotImages = [:]
+        recordFile = nil
     }
 
     private func scheduleSave() {
@@ -668,66 +695,92 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    /// 存 current.json；已经存进会议记录的，那个文件也一起更新
     func save() {
         guard persists else { return }
-        let file = SessionFile(title: title, context: context, activeSkillIDs: activeSkillIDs.sorted(),
-                               speakerNames: speakerNames, rows: rows.filter(\.isClosed), replies: replies,
-                               keywords: keywords)
-        try? FileManager.default.createDirectory(at: Self.folder, withIntermediateDirectories: true)
-        if let data = try? JSONEncoder().encode(file) {
-            try? data.write(to: Self.currentFile, options: .atomic)
+        saveTask?.cancel()
+        let record = snapshot()
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        guard let data = try? JSONEncoder().encode(record) else { return }
+        try? data.write(to: currentFile, options: .atomic)
+        if let recordFile {
+            var kept = record
+            kept.recordFile = nil
+            if let data = try? JSONEncoder().encode(kept) {
+                try? data.write(to: folder.appending(path: recordFile), options: .atomic)
+            }
+            NotificationCenter.default.post(name: MeetingRecords.changed, object: nil)
         }
     }
 
-    /// 把当前会议存档（sessions/日期-名称.json），清空记录；背景和技能留着，下一场常常用得上
-    func newSession() async {
-        if isRunning { await stop() }
-        save()
-        if !rows.isEmpty {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyyMMdd-HHmmss"
-            let name = title.replacingOccurrences(of: "/", with: "-")
-            try? FileManager.default.copyItem(
-                at: Self.currentFile,
-                to: Self.folder.appending(path: "\(formatter.string(from: .now))-\(name).json"))
+    /// 存进会议记录。之后这场的改动会自动跟着存进去，不用再点
+    func saveToRecords() {
+        guard !isEmpty else {
+            show(tr("还没有内容可保存", "Nothing to save yet"), ok: false)
+            return
         }
+        guard recordFile == nil else {
+            save()
+            show(tr("已保存", "Saved"))
+            return
+        }
+        var name = MeetingRecord.fileName(id: sessionID, startedAt: snapshot().startedAt)
+        // 这个名字被别的文件占了（极少见）就换个编号
+        if FileManager.default.fileExists(atPath: folder.appending(path: name).path) {
+            sessionID = UUID()
+            name = MeetingRecord.fileName(id: sessionID, startedAt: snapshot().startedAt)
+        }
+        recordFile = name
+        save()
+        show(tr("已保存到会议记录，之后的内容会自动存进去", "Saved to Meeting Records; new lines are saved as they come"))
+    }
+
+    /// 清空，开始新会议。存没存进会议记录由调用的地方先问好；这里不再存。
+    /// 背景、关键词、技能留着，下一场常常用得上
+    func clear() async {
+        if isRunning { await stop() }
+        if recordFile != nil { save() }
         rows = []
         replies = []
         selection = []
         speakerNames = [:]
+        screenshotImages = [:]
         title = tr("新会议", "New Meeting")
+        sessionID = UUID()
+        recordFile = nil
+        save()
+        NotificationCenter.default.post(name: MeetingRecords.changed, object: nil)
+    }
+
+    /// 打开会议记录里的一场，接着记（现在这场要不要先存，由调用的地方先问好）
+    func open(_ record: MeetingRecord, file: String) async {
+        if isRunning { await stop() }
+        if recordFile != nil { save() }
+        apply(record)
+        recordFile = file
+        // 老文件没有编号：补上，写回原来的文件
+        save()
+        show(tr("已打开「\(record.title)」，开始听会接着记在这场里", "Opened “\(record.title)”; listening continues in this meeting"))
+    }
+
+    /// 会议记录里这场被删了：当前会议变回没保存
+    func recordDeleted(_ file: String) {
+        guard recordFile == file else { return }
+        recordFile = nil
         save()
     }
 
-    func markdown() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        var text = "# \(title)\n\n"
-        if let first = rows.first { text += "\(formatter.string(from: first.startedAt))\n\n" }
-        let background = context.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !background.isEmpty { text += tr("## 背景\n\n\(background)\n\n", "## Context\n\n\(background)\n\n") }
-        text += tr("## 记录\n\n", "## Transcript\n\n")
-        formatter.dateFormat = "HH:mm:ss"
-        for row in rows {
-            text += "- **\(speakerLabel(row))** \(formatter.string(from: row.startedAt))：\(row.displayText)\n"
-            if let translation = row.translation { text += tr("  - 译：\(translation)\n", "  - Translation: \(translation)\n") }
+    func show(_ message: String, ok: Bool = true) {
+        toast = Toast(text: message, ok: ok)
+        toastTask?.cancel()
+        toastTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.toast = nil
         }
-        if !replies.isEmpty {
-            text += tr("\n## 回复建议\n", "\n## Suggested Replies\n")
-            for reply in replies {
-                text += "\n### \(formatter.string(from: reply.createdAt)) · \(reply.target)\n\n"
-                if let quote = reply.quote {
-                    text += "> \(reply.quoteSpeaker.map { "**\($0)**：" } ?? "")\(quote)\n\n"
-                }
-                text += "\(reply.text)\n"
-                if let followUp = followUp(for: reply), !followUp.rows.isEmpty {
-                    text += tr("\n**我实际说的**（\(followUp.verdict.label)）：\(followUp.text)\n",
-                               "\n**What I actually said** (\(followUp.verdict.label)): \(followUp.text)\n")
-                }
-            }
-        }
-        return text
     }
+
+    func markdown() -> String { snapshot().markdown() }
 }
 
 /// 音频线程写、界面线程读的音量表

@@ -8,6 +8,8 @@ struct OverlayActions {
     var resetSize: () -> Void = {}
     /// 打开设置窗口的翻译页（下载语言包）
     var openTranslation: () -> Void = {}
+    /// 打开设置窗口的会议记录页
+    var openRecords: () -> Void = {}
 }
 
 /// 悬浮窗：顶部控制栏，中间是原文/译文对照的字幕，底部是回复按钮。生成的回复在旁边的回复面板里（SidecarView）。
@@ -37,6 +39,10 @@ struct OverlayView: View {
                 transcript
                 if let notice = session.notice { noticeBanner(notice) }
             }
+            .overlay(alignment: .bottom) {
+                if let toast = session.toast { ToastView(toast: toast, theme: theme).padding(10) }
+            }
+            .animation(.easeOut(duration: 0.2), value: session.toast)
             footer
         }
         .font(.system(size: settings.value.fontSize))
@@ -131,6 +137,26 @@ struct OverlayView: View {
             Section {
                 Button(action: actions.openMain) { Label(tr("会话与设置…", "Session & Settings…"), systemImage: "gearshape") }
                 Button(action: session.replyToClipboardImage) { Label(tr("用剪贴板里的图片回复", "Reply with Image on Clipboard"), systemImage: "doc.on.clipboard") }
+            }
+            Section(tr("会议记录", "Meeting Records")) {
+                if session.recordFile == nil {
+                    Button(action: session.saveToRecords) {
+                        Label(tr("保存到会议记录", "Save to Meeting Records"), systemImage: "tray.and.arrow.down")
+                    }
+                    .disabled(session.isEmpty)
+                } else {
+                    Label(tr("已在会议记录里，自动保存", "In Meeting Records, saved automatically"), systemImage: "checkmark.circle")
+                        .disabled(true)
+                }
+                Button { MeetingCommands.clear(session) } label: {
+                    Label(tr("清空，开始新会议", "Clear, New Meeting"), systemImage: "plus.bubble")
+                }
+                .disabled(session.isEmpty)
+                Button { MeetingCommands.export(session.snapshot()) } label: {
+                    Label(tr("导出记录…", "Export Transcript…"), systemImage: "square.and.arrow.up")
+                }
+                .disabled(session.isEmpty)
+                Button(action: actions.openRecords) { Label(tr("查看会议记录…", "Show Meeting Records…"), systemImage: "archivebox") }
             }
             Section {
                 Button { ui.clickThrough.toggle() } label: {
@@ -321,6 +347,27 @@ struct Hairline: View {
 
     var body: some View {
         Rectangle().fill(ink.opacity(0.08)).frame(height: 1)
+    }
+}
+
+/// 一闪而过的确认（已保存、已清空），几秒后自己消失
+struct ToastView: View {
+    let toast: SessionModel.Toast
+    let theme: OverlayTheme
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: toast.ok ? "checkmark.circle.fill" : "info.circle.fill")
+                .foregroundStyle(toast.ok ? theme.accent : theme.ink.opacity(0.6))
+            Text(toast.text).font(.system(size: 12, weight: .medium)).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.tint.opacity(0.96)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.ink.opacity(0.12)))
+        .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
+        .transition(.opacity.combined(with: .offset(y: 6)))
+        .allowsHitTesting(false)
     }
 }
 
