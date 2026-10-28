@@ -201,12 +201,12 @@ extension OverlayTheme {
 
 extension View {
     /// 悬浮窗那样的底：玻璃 + 主题底色、圆角、文字阴影，系统控件跟着深浅色走
-    func overlaySurface(theme: OverlayTheme, opacity: Double, flat: Bool) -> some View {
+    func overlaySurface(theme: OverlayTheme, opacity: Double, flat: Bool, cornerRadius: CGFloat = 22) -> some View {
         foregroundStyle(theme.ink)
             // 底色调得很淡时，文字加一圈细阴影（黑字时是白晕），盖在花的画面上也看得清
             .shadow(color: theme.halo.opacity(GlassBackground.textShadow(opacity)), radius: 1.4, y: 0.5)
-            .background(GlassBackground(theme: theme, opacity: opacity, flat: flat))
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(GlassBackground(theme: theme, opacity: opacity, flat: flat, cornerRadius: cornerRadius))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .environment(\.colorScheme, theme.light ? .light : .dark)
             .tint(theme.accent)
     }

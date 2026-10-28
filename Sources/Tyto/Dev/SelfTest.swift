@@ -26,6 +26,7 @@ import Foundation
 ///   Tyto --render-preview <文件夹>                                         用示例数据把悬浮窗画成图片（不碰屏幕）
 ///   Tyto --selftest-followup                                              回复建议之后"我实际说的"：找哪几句、判照着说/改了说法/没回
 ///   Tyto --selftest-records                                               会议记录：保存、清空、接着记、删除（在临时文件夹里）
+///   Tyto --selftest-layouts [文件夹]                                       悬浮窗的三种大小（给了文件夹时在屏幕上截图）
 ///   Tyto --selftest-backdrop                                              字色自动：在屏幕上放白底页面和会议画面，量亮度，看选白字还是黑字
 enum SelfTest {
     /// 自测期间要一直活着的对象
@@ -138,6 +139,12 @@ enum SelfTest {
         }
         if arguments.contains("--selftest-followup") {
             exit(followUp())
+        }
+        // --selftest-layouts [截图文件夹]：悬浮窗的三种大小（给了文件夹时会在屏幕上开窗口几秒、截图）
+        if arguments.contains("--selftest-layouts") {
+            let folder = value(after: "--selftest-layouts").flatMap { $0.hasPrefix("--") ? nil : $0 }
+            Task { exit(await layouts(to: folder)) }
+            return true
         }
         if arguments.contains("--selftest-records") {
             Task { exit(await records()) }
@@ -337,6 +344,26 @@ enum SelfTest {
             }
         }
         settings.value.transcriptStyle = style
+        // 字幕条（1～3 行，带不带译文）、按钮条，盖在会议画面和白底页面上
+        session.showSample(rows: rows, replies: sideReplies, selection: [])
+        let translation = settings.value.translationEnabled
+        for (lines, translated, light) in [(1, false, false), (2, false, false), (2, true, false), (3, true, false), (2, true, true)] {
+            settings.value.overlayLayout = .captions
+            settings.value.captionLines = lines
+            settings.value.translationEnabled = translated
+            let size = CGSize(width: 640, height: CaptionBar.height(lines: lines, fontSize: settings.value.fontSize))
+            guard renderBar(session: session, settings: settings, size: size, light: light,
+                            to: folderURL.appending(path: "captions-\(lines)\(translated ? "-translation" : "")\(light ? "-light" : "").png"))
+            else { return 1 }
+        }
+        settings.value.translationEnabled = translation
+        settings.value.overlayLayout = .buttons
+        for light in [false, true] {
+            guard renderBar(session: session, settings: settings, size: ButtonBar.size, light: light,
+                            to: folderURL.appending(path: "buttons\(light ? "-light" : "").png"))
+            else { return 1 }
+        }
+        settings.value.overlayLayout = .full
         // 翻译语言包没下载时的提示条
         session.showSample(rows: rows, replies: [], selection: [])
         session.notice = TytoError.translationNotInstalled(tr("英语 → 简体中文", "English → Simplified Chinese")).localizedDescription
@@ -838,6 +865,37 @@ enum SelfTest {
             .frame(height: size.height)
         }
         .frame(width: size.width + side + 80, height: size.height + 80)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        guard let image = renderer.cgImage else {
+            print("画不出来")
+            return false
+        }
+        do {
+            try ImageFile.writePNG(image, to: url)
+            print(url.path)
+            return true
+        } catch {
+            print("存不了：\(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// 字幕条、按钮条画在模拟的会议画面上（玻璃的近似和 render 一样）
+    @MainActor
+    private static func renderBar(session: SessionModel, settings: SettingsStore, size: CGSize, light: Bool, to url: URL) -> Bool {
+        let backdrop = SampleBackdrop(light: light)
+        let state = OverlayState()
+        state.backdropIsLight = light
+        let shape = RoundedRectangle(cornerRadius: settings.value.overlayLayout == .captions ? 14 : 16, style: .continuous)
+        let view = ZStack {
+            backdrop
+            backdrop.blur(radius: 26).mask { shape.frame(width: size.width, height: size.height) }
+            OverlayView(session: session, settings: settings, ui: state, flatForPreview: true)
+                .frame(width: size.width, height: size.height)
+        }
+        .frame(width: size.width + 80, height: size.height + 60)
+        .clipped()
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
         guard let image = renderer.cgImage else {

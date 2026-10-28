@@ -44,13 +44,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             openMain: { [weak self] in self?.openMainWindow() },
             hide: { [weak self] in self?.toggleOverlay() },
             quit: { NSApp.terminate(nil) },
-            resetSize: { [weak self] in self?.overlay?.resetFrame() },
+            resetSize: { [weak self] in
+                guard let self else { return }
+                overlay?.resetFrame(captionLines: settings.value.captionLines, fontSize: settings.value.fontSize)
+            },
             openTranslation: { [weak self] in self?.openMainWindow(page: .translation) },
             openRecords: { [weak self] in self?.openMainWindow(page: .records) })
         let panel = OverlayPanel(rootView: OverlayView(session: session, settings: settings, ui: overlayState,
                                                        actions: actions))
-        panel.orderFrontRegardless()
         overlay = panel
+        setupLayout(panel)
+        panel.orderFrontRegardless()
         backdropProbe = BackdropProbe(panel: panel, settings: settings, state: overlayState)
         backdropProbe?.start()
         setupSidecar(beside: panel)
@@ -166,6 +170,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private static var windowTitle: String { tr("Tyto 听译", "Tyto") }
 
+    /// 悬浮窗的三种大小：设置里换了（菜单、⌃⌥M、展开按钮），或字号、字幕行数变了，窗口跟着变；
+    /// 拖字幕条的下边改了行数，记到设置里
+    private func setupLayout(_ panel: OverlayPanel) {
+        applyLayout()
+        settings.$value
+            .map { [$0.overlayLayout.rawValue, "\($0.captionLines)", "\($0.fontSize)"] }
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.applyLayout() } }
+            .store(in: &subscriptions)
+        NotificationCenter.default.publisher(for: NSWindow.didEndLiveResizeNotification, object: panel)
+            .sink { [weak self] _ in
+                guard let self, let overlay, overlay.layout == .captions else { return }
+                let lines = CaptionBar.lines(forHeight: overlay.frame.height, fontSize: settings.value.fontSize)
+                if settings.value.captionLines != lines { settings.value.captionLines = lines }
+            }
+            .store(in: &subscriptions)
+    }
+
+    private func applyLayout() {
+        let current = settings.value
+        overlay?.apply(current.overlayLayout, captionLines: current.captionLines, fontSize: current.fontSize)
+        placeSidecar()
+    }
+
     private func toggleOverlay() {
         guard let overlay else { return }
         if overlay.isVisible { overlay.orderOut(nil) } else { overlay.orderFrontRegardless() }
@@ -214,7 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     private func placeSidecar() {
         guard let overlay, let sidecar, sidecar.isVisible || settings.value.showReplyPanel else { return }
-        sidecar.place(beside: overlay)
+        sidecar.place(beside: overlay, compact: overlay.layout != .full)
     }
 
     // MARK: - 提词器
@@ -338,6 +367,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
         menu.addItem(item(overlay?.isVisible == true ? tr("隐藏悬浮窗", "Hide Overlay") : tr("显示悬浮窗", "Show Overlay"),
                           "macwindow", #selector(toggleOverlayAction), key: "t"))
+        menu.addItem(layoutMenuItem())
         let translation = item(tr("显示译文", "Show Translation"), "character.bubble", #selector(toggleTranslation))
         translation.state = current.translationEnabled ? .on : .off
         menu.addItem(translation)
@@ -392,6 +422,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
             menu.addItem(check)
         }
         menu.addItem(item(tr("退出", "Quit"), "power", #selector(quit), key: "q"))
+    }
+
+    /// 「悬浮窗大小」子菜单：三种大小，当前的打勾；⌃⌥M 按顺序换
+    private func layoutMenuItem() -> NSMenuItem {
+        let parent = item(tr("悬浮窗大小", "Overlay Size"), settings.value.overlayLayout.symbol, nil)
+        let submenu = NSMenu()
+        for layout in OverlayLayout.allCases {
+            let entry = item(layout.label, layout.symbol, #selector(layoutAction(_:)))
+            entry.representedObject = layout.rawValue
+            entry.state = settings.value.overlayLayout == layout ? .on : .off
+            entry.toolTip = layout.detail
+            submenu.addItem(entry)
+        }
+        submenu.addItem(.separator())
+        submenu.addItem(item(tr("换下一种", "Next Size"), "arrow.triangle.2.circlepath", #selector(nextLayoutAction), key: "m"))
+        parent.submenu = submenu
+        return parent
+    }
+
+    @objc private func layoutAction(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let layout = OverlayLayout(rawValue: raw) else { return }
+        showLayout(layout)
+    }
+
+    @objc private func nextLayoutAction() { showLayout(settings.value.overlayLayout.next) }
+
+    /// 换大小；悬浮窗收着的话顺便放出来
+    private func showLayout(_ layout: OverlayLayout) {
+        settings.value.overlayLayout = layout
+        if overlay?.isVisible == false { toggleOverlay() }
     }
 
     @objc private func languageAction(_ sender: NSMenuItem) {
@@ -518,6 +578,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         view.addItem(item(tr("开始 / 停止听", "Start / Stop Listening"), "waveform", #selector(toggleListening), key: "l"))
         view.addItem(.separator())
         view.addItem(item(tr("悬浮窗", "Overlay"), "macwindow", #selector(toggleOverlayAction), key: "t"))
+        view.addItem(layoutMenuItem())
         view.addItem(item(tr("回复面板", "Replies Panel"), "sidebar.left", #selector(toggleSidecarAction), key: "b"))
         view.addItem(item(tr("提词器", "Prompter"), "doc.text", #selector(togglePrompterAction), key: "n"))
         view.addItem(item(tr("显示译文", "Show Translation"), "character.bubble", #selector(toggleTranslation)))
@@ -553,6 +614,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         case #selector(toggleTranslation): menuItem.state = settings.value.translationEnabled ? .on : .off
         case #selector(toggleClickThrough): menuItem.state = overlayState.clickThrough ? .on : .off
         case #selector(toggleListening): menuItem.state = session.isRunning ? .on : .off
+        case #selector(layoutAction(_:)): menuItem.state = menuItem.representedObject as? String == settings.value.overlayLayout.rawValue ? .on : .off
         default: break
         }
         return true
@@ -578,6 +640,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private func registerHotKeys() {
         let modifiers = controlKey | optionKey
         hotKeys.register(keyCode: kVK_ANSI_T, modifiers: modifiers) { [weak self] in self?.toggleOverlay() }
+        hotKeys.register(keyCode: kVK_ANSI_M, modifiers: modifiers) { [weak self] in self?.nextLayoutAction() }
         hotKeys.register(keyCode: kVK_ANSI_R, modifiers: modifiers) { [weak self] in self?.reply() }
         hotKeys.register(keyCode: kVK_ANSI_P, modifiers: modifiers) { [weak self] in self?.overlayState.clickThrough.toggle() }
         hotKeys.register(keyCode: kVK_ANSI_B, modifiers: modifiers) { [weak self] in self?.settings.value.showReplyPanel.toggle() }

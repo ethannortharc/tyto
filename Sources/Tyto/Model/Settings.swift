@@ -139,6 +139,10 @@ struct AppSettings: Codable, Equatable {
     /// 底色浓度：0 是完全透明（连玻璃都没有），往右先出现玻璃，再加深底色
     var overlayOpacity = 0.45
     var fontSize = 14.0
+    /// 悬浮窗的大小：完整、字幕条、按钮条
+    var overlayLayout: OverlayLayout = .full
+    /// 字幕条显示几行（拖字幕条的下边改）
+    var captionLines = 2
 
     // 提词器
     var showPrompter = false
@@ -358,6 +362,44 @@ enum OverlayTextColor: String, Codable, CaseIterable, Identifiable, Sendable {
         case .white: tr("白字", "White")
         case .black: tr("黑字", "Black")
         }
+    }
+}
+
+/// 悬浮窗的三种大小
+enum OverlayLayout: String, Codable, CaseIterable, Identifiable, Sendable {
+    /// 顶部按钮、字幕列表、底部回复按钮
+    case full
+    /// 只有最近一两行字幕（打开译文时下面一行是译文）
+    case captions
+    /// 只有一行按钮（截屏回复、回复、面板开关）
+    case buttons
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .full: tr("完整", "Full")
+        case .captions: tr("字幕条", "Caption Bar")
+        case .buttons: tr("按钮条", "Button Bar")
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .full: "rectangle.portrait"
+        case .captions: "captions.bubble"
+        case .buttons: "ellipsis.rectangle"
+        }
+    }
+    var detail: String {
+        switch self {
+        case .full: tr("字幕列表、选句回复、全部按钮", "Transcript list, reply to selected lines, all buttons")
+        case .captions: tr("只显示最近的一两行字幕，拖下边改行数", "Only the latest line or two; drag the bottom edge to change")
+        case .buttons: tr("只留一行按钮，截屏回复用", "Just a row of buttons, for screenshot replies")
+        }
+    }
+    /// ⌃⌥M 按这个顺序换
+    var next: OverlayLayout {
+        let all = Self.allCases
+        return all[(all.firstIndex(of: self)! + 1) % all.count]
     }
 }
 

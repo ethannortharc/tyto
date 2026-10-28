@@ -25,13 +25,24 @@ final class SidecarPanel: NSPanel {
         contentView = host
     }
 
-    /// 贴到悬浮窗旁边：左边放得下就放左边（悬浮窗默认靠屏幕右边），放不下放右边
-    func place(beside overlay: NSWindow) {
-        let frame = overlay.frame
-        let area = (overlay.screen ?? NSScreen.main)?.visibleFrame ?? frame
-        let left = frame.minX - Self.gap - Self.width
-        let x = left >= area.minX ? left : frame.maxX + Self.gap
-        setFrame(NSRect(x: x, y: frame.minY, width: Self.width, height: frame.height), display: true)
+    /// 贴到悬浮窗旁边：左边放得下就放左边（悬浮窗默认靠屏幕右边），放不下放右边。
+    /// 悬浮窗缩成字幕条、按钮条时太矮，放不下回复：改成放在它下面（下面放不下就放上面），右边对齐
+    func place(beside overlay: NSWindow, compact: Bool = false) {
+        setFrame(Self.frame(beside: overlay.frame, in: (overlay.screen ?? NSScreen.main)?.visibleFrame ?? overlay.frame,
+                            compact: compact), display: true)
+    }
+
+    static func frame(beside frame: NSRect, in area: NSRect, compact: Bool) -> NSRect {
+        guard compact else {
+            let left = frame.minX - gap - width
+            let x = left >= area.minX ? left : frame.maxX + gap
+            return NSRect(x: x, y: frame.minY, width: width, height: frame.height)
+        }
+        let height = min(460, area.height * 0.6).rounded()
+        let x = min(max(frame.maxX - width, area.minX), area.maxX - width)
+        let below = frame.minY - gap - height
+        let y = below >= area.minY ? below : min(frame.maxY + gap, area.maxY - height)
+        return NSRect(x: x, y: y, width: width, height: height)
     }
 
     override var canBecomeKey: Bool { true }

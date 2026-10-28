@@ -1222,6 +1222,14 @@ private struct OllamaCatalog: View {
 private struct AppearancePage: View {
     @ObservedObject var settings: SettingsStore
     @State private var preview: SessionModel?
+
+    private var previewHeight: CGFloat {
+        switch settings.value.overlayLayout {
+        case .full: 470
+        case .captions: CaptionBar.height(lines: settings.value.captionLines, fontSize: settings.value.fontSize)
+        case .buttons: ButtonBar.size.height
+        }
+    }
     /// 预览的背景换成白底页面，看黑字的效果
     @State private var previewOnLight = false
     @StateObject private var previewState = OverlayState()
@@ -1257,6 +1265,16 @@ private struct AppearancePage: View {
                 Text(tr("主题", "Theme"))
             }
             Section {
+                Row(symbol: "rectangle.compress.vertical", title: tr("悬浮窗大小", "Overlay Size"),
+                    detail: tr("字幕条只显示最近一两行，拖它的下边改行数；按钮条只留一行按钮。⌃⌥M 也能换",
+                               "Caption Bar shows only the latest line or two (drag its bottom edge for more); Button Bar keeps one row of buttons. ⌃⌥M switches too")) {
+                    Picker("", selection: $settings.value.overlayLayout) {
+                        ForEach(OverlayLayout.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 230)
+                }
                 Row(symbol: "circle.lefthalf.filled", title: tr("底色浓度", "Tint"), detail: tr("最左边完全透明；往右先出现玻璃，再加深底色", "Fully transparent at the far left; moving right adds glass first, then a darker tint")) {
                     HStack(spacing: 8) {
                         Image(systemName: "circle.dotted").foregroundStyle(.secondary)
@@ -1300,7 +1318,7 @@ private struct AppearancePage: View {
                     SampleBackdrop(light: previewOnLight)
                     if let preview {
                         OverlayView(session: preview, settings: settings, ui: previewState)
-                            .frame(width: 440, height: 470)
+                            .frame(width: settings.value.overlayLayout == .full ? 440 : 480, height: previewHeight)
                             .allowsHitTesting(false)
                     }
                 }
@@ -1322,6 +1340,7 @@ private struct AppearancePage: View {
         }
         .formStyle(.grouped)
         .onAppear { if preview == nil { preview = SampleData.session(settings: settings) } }
+        .animation(.easeOut(duration: 0.2), value: settings.value.overlayLayout)
         .onChange(of: previewOnLight, initial: true) { previewState.backdropIsLight = previewOnLight }
     }
 }
@@ -1490,6 +1509,7 @@ private struct ShortcutsPage: View {
         (["⌃", "⌥", "S"], tr("截屏回复（按设置截最前面的 App 或整个屏幕）", "Screenshot Reply (frontmost app or entire screen, per settings)"), "camera.viewfinder"),
         (["⌃", "⌥", "A"], tr("截屏回复：框选一块", "Screenshot Reply: Select Area"), "rectangle.dashed"),
         (["⌃", "⌥", "T"], tr("显示 / 隐藏悬浮窗", "Show / Hide Overlay"), "macwindow"),
+        (["⌃", "⌥", "M"], tr("悬浮窗换大小：完整 → 字幕条 → 按钮条", "Overlay size: Full → Caption Bar → Button Bar"), "rectangle.compress.vertical"),
         (["⌃", "⌥", "B"], tr("打开 / 收起回复面板", "Show / Hide Replies Panel"), "sidebar.left"),
         (["⌃", "⌥", "N"], tr("打开 / 收起提词器", "Show / Hide Prompter"), "doc.text"),
         (["⌃", "⌥", "↑ / ↓"], tr("提词器：上一节 / 下一节（提词器开着时）", "Prompter: Previous / Next Section (while open)"), "arrow.up.arrow.down"),

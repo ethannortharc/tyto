@@ -33,6 +33,8 @@ A floating meeting assistant for macOS. It turns what people say into live capti
 - **One-click replies**: click a line, select several, or reply to "the latest". Replies use the meeting background and the skills you picked, in three parts: what they mean, what you can say, and a translation of your reply.
 - **Replies panel**: every reply stays in a column beside the overlay (⌃⌥B), newest first; delete any of them, and they are saved with the session. Under a meeting reply Tyto adds *What you said*: what the local speaker named "Me" said after that line and before the other side moved on, tagged *Followed*, *Rephrased* or *No reply*. Those captions get a small icon that jumps to the reply, and the exported notes include the comparison.
 - **Prompter**: notes you prepared before the meeting, in their own see-through window (⌃⌥N) that you can put anywhere, e.g. right under the camera. Markdown, HTML or plain text; edits to the file show up right away. The bar on top always shows which section you're in and opens the outline; ⌃⌥↑ / ⌃⌥↓ jump between sections. With *Follow* on, the notes scroll to and highlight the paragraph you're reading out. When the other side asks about something that has its own section, a hint shows up at the bottom and ⌃⌥J jumps there. Matching runs on your Mac and also uses the translation, so English speech finds Chinese notes.
+- **Three sizes**: the full overlay; a caption bar with just the latest line or two (with translation on, the lower line is the translation; drag the bottom edge for more lines); and a button bar with a single row of buttons for screenshot replies. Switch in the ⋯ menu or with ⌃⌥M; each size remembers its own position.
+- **Meeting records**: *Save to Meeting Records* in the ⋯ menu keeps the meeting, and new lines are saved as they come. *Clear, New Meeting* asks first if the meeting isn't saved. The *Meeting Records* page in Settings lets you search, read each meeting's transcript and replies, export Markdown, continue a meeting, or delete it.
 - **Screenshot replies**: ⌃⌥S captures the frontmost app (say, a Teams chat), works out who is asking what, and writes three replies you can paste; the first is already on your clipboard.
 - **Bring any model**: configure each provider once, then choose a model for replies, vision, translation and transcription. Supports Anthropic, OpenAI, OpenRouter, Gemini, DeepSeek, Tongyi Qwen, SiliconFlow, Groq, Soniox, AssemblyAI, ElevenLabs, Deepgram, local Ollama / LM Studio, and any OpenAI-compatible endpoint.
 - **Looks**: macOS 26 Liquid Glass with three palettes; background from fully clear to deep; adjustable font size.
@@ -63,7 +65,8 @@ The *Permissions & About* page shows each permission's status with a button to t
 ## Everyday use
 
 - **Before a meeting**: in *Session*, write a few lines of background (purpose, attendees, your role, terms) and keywords, and tick the skills to use. Replies take all of it into account.
-- **During the meeting**: ⌃⌥L starts listening. Click a line to select it, then *Reply* or ⌃⌥R.
+- **During the meeting**: ⌃⌥L starts listening. Click a line to select it, then *Reply* or ⌃⌥R. If the overlay is in the way, ⌃⌥M switches to the caption bar or the button bar.
+- **After the meeting**: *Save to Meeting Records* in the ⋯ menu, or just *Clear, New Meeting* (it asks if the meeting isn't saved). Past meetings are under *Meeting Records* in Settings.
 - **Answering messages**: press ⌃⌥S in Teams / Slack / Mail; a few seconds later the reply is on your clipboard — ⌘V and send. Want it different? Type an instruction under the reply ("decline politely", "in Chinese") and *Regenerate*.
 - **Appearance**: the palette icon on the overlay changes theme, text color, background and font size. Text color defaults to *Auto*: black text on light glass over white documents and web pages, white text over darker things like meeting video; you can also fix it to white or black. Captions come in two styles, *Avatar* and *Line* (Settings → Appearance). Drag the edges to resize; *Reset size and position* in the menu restores the default — about 38% of the screen height and 26% of its width, on the right, clear of the meeting video.
 
@@ -78,6 +81,7 @@ They work while the meeting app is in front.
 | ⌃⌥S | Screenshot reply (frontmost app, or whole screen if set) |
 | ⌃⌥A | Screenshot reply: select an area |
 | ⌃⌥T | Show / hide the overlay |
+| ⌃⌥M | Overlay size: Full → Caption Bar → Button Bar |
 | ⌃⌥B | Show / hide the replies panel |
 | ⌃⌥N | Show / hide the prompter |
 | ⌃⌥↑ / ⌃⌥↓ | Prompter: previous / next section (while it's open) |
@@ -216,6 +220,8 @@ Check each part without a meeting (arguments to `build/Tyto.app/Contents/MacOS/T
 | `--selftest-backdrop` | Auto text color: measure a white page and a meeting backdrop, check white vs. black |
 | `--selftest-followup` | *What you said* after a suggested reply: which lines, followed / rephrased / no reply; which side the replies panel goes |
 | `--selftest-sharing [folder]` | Screen sharing: puts the overlay, replies panel, prompter, a popover and an open menu on screen, captures the whole display like a meeting app, and checks none of them appear (plus a control that must appear) |
+| `--selftest-records` | Meeting records: save, auto-update, clear, continue, relaunch, old files, delete, export (in a temporary folder, never your real records) |
+| `--selftest-layouts [folder]` | The three overlay sizes: dimensions, line-by-line resizing, font size changes, where the replies panel goes, remembered positions; with a folder, on-screen screenshots too |
 | `--selftest-prompter [folder]` | Prompter in a real window: outline, Follow, hints (English and Chinese notes), other people's HTML colors, reload on edit; with a folder, screenshots too |
 
 Add `--settings-json '{...}'` to any of them to override settings without saving. The run log is at `~/Library/Logs/Tyto.log`.

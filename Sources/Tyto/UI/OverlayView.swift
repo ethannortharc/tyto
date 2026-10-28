@@ -22,13 +22,21 @@ struct OverlayView: View {
     var flatForPreview = false
 
     @State private var showAppearance = false
+    /// 字幕条、按钮条上点了提示图标
+    @State private var showNotice = false
 
     private var theme: OverlayTheme { OverlayTheme.current(settings.value, backdropIsLight: ui.backdropIsLight) }
 
     var body: some View {
-        content
-            // 换界面语言时整棵重建，文字立即全部换过来
-            .id(settings.value.language)
+        Group {
+            switch settings.value.overlayLayout {
+            case .full: content
+            case .captions: captionBar
+            case .buttons: buttonBar
+            }
+        }
+        // 换界面语言时整棵重建，文字立即全部换过来
+        .id(settings.value.language)
     }
 
     private var content: some View {
@@ -81,7 +89,7 @@ struct OverlayView: View {
                 .popover(isPresented: $showAppearance, arrowEdge: .bottom) {
                     AppearancePopover(settings: settings, ui: ui)
                 }
-                moreMenu
+                moreMenu()
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
@@ -131,9 +139,17 @@ struct OverlayView: View {
         .help(tr("截屏回复：\(settings.value.captureTarget.title)（⌃⌥S），小箭头选别的方式", "Screenshot Reply: \(settings.value.captureTarget.title) (⌃⌥S); use the arrow for other options"))
     }
 
-    /// 更多：先是"去哪里"（设置的几个常用页），再是窗口操作
-    private var moreMenu: some View {
+    /// 更多：先是悬浮窗大小，再是"去哪里"（设置的几个常用页）、会议记录、窗口操作
+    private func moreMenu(size: CGFloat = 28) -> some View {
         Menu {
+            Section(tr("悬浮窗大小（⌃⌥M 换）", "Overlay Size (⌃⌥M)")) {
+                Picker(selection: $settings.value.overlayLayout) {
+                    ForEach(OverlayLayout.allCases) { Label($0.label, systemImage: $0.symbol).tag($0) }
+                } label: {
+                    EmptyView()
+                }
+                .pickerStyle(.inline)
+            }
             Section {
                 Button(action: actions.openMain) { Label(tr("会话与设置…", "Session & Settings…"), systemImage: "gearshape") }
                 Button(action: session.replyToClipboardImage) { Label(tr("用剪贴板里的图片回复", "Reply with Image on Clipboard"), systemImage: "doc.on.clipboard") }
@@ -169,7 +185,7 @@ struct OverlayView: View {
                 Button(action: actions.quit) { Label(tr("退出 Tyto ⌃⌥Q", "Quit Tyto ⌃⌥Q"), systemImage: "power") }
             }
         } label: {
-            MenuGlyph(symbol: "ellipsis", theme: theme)
+            MenuGlyph(symbol: "ellipsis", theme: theme, size: size)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -202,6 +218,195 @@ struct OverlayView: View {
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.orange.opacity(0.35)))
         .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
         .padding(10)
+    }
+
+    // MARK: - 字幕条、按钮条
+
+    /// 字幕条：左边开始/停止，中间最近的一两行字幕（打开译文、两行以上时下面一半是译文），右边展开和菜单。
+    /// 字是从下往上排的，新的一句在最下面，旧的从上边移出去。
+    /// 译文比原文晚一点到，所以译文前面也写说话人，看得出是谁的哪句；最近几句都还没译文时，行数全给原文
+    private var captionBar: some View {
+        let lines = min(max(settings.value.captionLines, 1), CaptionBar.maxLines)
+        let recent = session.rows.suffix(8)
+        let translated = settings.value.translationEnabled && recent.contains { $0.translation != nil }
+        let translationLines = translated && lines >= 2 ? lines / 2 : 0
+        let lineHeight = CaptionBar.lineHeight(settings.value.fontSize)
+        return HStack(alignment: .center, spacing: 10) {
+            MiniListenButton(session: session, theme: theme)
+            VStack(alignment: .leading, spacing: 0) {
+                captionLane(captionText(recent), lines: lines - translationLines, lineHeight: lineHeight)
+                if translationLines > 0 {
+                    captionLane(translationText(recent), lines: translationLines, lineHeight: lineHeight)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 2) {
+                if let notice = session.notice { noticeButton(notice, size: 24) }
+                IconButton(symbol: "arrow.up.left.and.arrow.down.right", theme: theme,
+                           help: tr("展开成完整悬浮窗（⌃⌥M 换大小）", "Expand to the full overlay (⌃⌥M changes size)"), size: 24) {
+                    settings.value.overlayLayout = .full
+                }
+                moreMenu(size: 24)
+            }
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 6)
+        .padding(.vertical, CaptionBar.padding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .gesture(WindowDragGesture())
+        .overlay {
+            if let toast = session.toast { ToastView(toast: toast, theme: theme, compact: true) }
+        }
+        .animation(.easeOut(duration: 0.2), value: session.toast)
+        .overlaySurface(theme: theme, opacity: settings.value.overlayOpacity, flat: flatForPreview, cornerRadius: 14)
+    }
+
+    /// 一条字幕"车道"：固定几行高，字贴着底边排，多出来的从上边裁掉
+    private func captionLane(_ text: AttributedString, lines: Int, lineHeight: CGFloat) -> some View {
+        Color.clear
+            .frame(height: CGFloat(lines) * lineHeight)
+            .overlay(alignment: .bottomLeading) {
+                Text(text)
+                    .font(.system(size: CaptionBar.fontSize(settings.value.fontSize)))
+                    .lineHeight(.exact(points: lineHeight))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .clipped()
+    }
+
+    /// 最近几句原文：每句一段，前面是说话人（说话人的颜色）
+    private func captionText(_ rows: ArraySlice<Utterance>) -> AttributedString {
+        guard !rows.isEmpty else {
+            var hint = AttributedString(session.isRunning ? tr("在听…", "Listening…")
+                                                          : tr("点左边的圆点开始听（⌃⌥L）", "Click the dot to start listening (⌃⌥L)"))
+            hint.foregroundColor = theme.ink.opacity(0.5)
+            return hint
+        }
+        var text = AttributedString()
+        for row in rows {
+            if !text.characters.isEmpty { text += AttributedString("\n") }
+            text += captionSpeaker(row)
+            var said = AttributedString(row.text)
+            said.foregroundColor = theme.ink.opacity(0.95)
+            text += said
+            if !row.pending.isEmpty {
+                var pending = AttributedString((row.text.isEmpty ? "" : " ") + row.pending)
+                pending.foregroundColor = theme.ink.opacity(0.5)
+                text += pending
+            }
+        }
+        return text
+    }
+
+    /// 最近几句的译文，每句一段，前面也是说话人
+    private func translationText(_ rows: ArraySlice<Utterance>) -> AttributedString {
+        var text = AttributedString()
+        for row in rows {
+            guard let translation = row.translation else { continue }
+            if !text.characters.isEmpty { text += AttributedString("\n") }
+            text += captionSpeaker(row)
+            var line = AttributedString(translation)
+            line.foregroundColor = theme.translation.opacity(theme.light ? 0.92 : 0.85)
+            text += line
+        }
+        return text
+    }
+
+    private func captionSpeaker(_ row: Utterance) -> AttributedString {
+        var name = AttributedString(shortSpeaker(row) + "  ")
+        name.foregroundColor = theme.color(for: row)
+        name.font = .system(size: CaptionBar.fontSize(settings.value.fontSize) - 1, weight: .semibold)
+        return name
+    }
+
+    /// 字幕条地方小：改过名字的用名字，没改的用"说话人 1"（远端）、"本地 1"
+    private func shortSpeaker(_ row: Utterance) -> String {
+        if let name = session.speakerNames[row.speakerKey], !name.isEmpty { return name }
+        guard let speaker = row.speaker else { return row.channel.label }
+        return row.channel == .remote ? tr("说话人\(speaker)", "Speaker \(speaker)") : tr("本地\(speaker)", "Local \(speaker)")
+    }
+
+    /// 按钮条：开始/停止和时长，截屏回复、回复、提词器、回复面板，菜单，展开
+    private var buttonBar: some View {
+        HStack(spacing: 6) {
+            ListenButton(session: session, theme: theme)
+            Spacer(minLength: 4)
+            if let notice = session.notice { noticeButton(notice, size: 26) }
+            IconButton(symbol: "translate", active: settings.value.translationEnabled, theme: theme,
+                       help: settings.value.translationEnabled ? tr("隐藏译文", "Hide Translation") : tr("显示译文", "Show Translation"),
+                       size: 26) {
+                settings.value.translationEnabled.toggle()
+                session.translationToggled()
+            }
+            captureMenu
+            IconButton(symbol: "arrowshape.turn.up.left.fill", theme: theme,
+                       help: session.selection.isEmpty ? tr("回复最近的话（⌃⌥R）", "Reply to Latest (⌃⌥R)")
+                                                       : tr("回复选中的 \(session.selection.count) 句（⌃⌥R）", "Reply to \(session.selection.count) Selected (⌃⌥R)"),
+                       size: 26) {
+                session.reply(to: session.selection.isEmpty ? nil : Array(session.selection))
+            }
+            PanelToggle(symbol: "doc.text", title: nil, on: settings.value.showPrompter, theme: theme,
+                        help: settings.value.showPrompter ? tr("收起提词器（⌃⌥N）", "Hide Prompter (⌃⌥N)")
+                                                          : tr("提词器：会前准备的材料（⌃⌥N）", "Prompter: your prepared notes (⌃⌥N)")) {
+                settings.value.showPrompter.toggle()
+            }
+            PanelToggle(symbol: "sidebar.left", title: session.replies.isEmpty ? nil : "\(session.replies.count)",
+                        on: settings.value.showReplyPanel, theme: theme,
+                        help: settings.value.showReplyPanel ? tr("收起回复面板（⌃⌥B）", "Hide Replies (⌃⌥B)") : tr("打开回复面板（⌃⌥B）", "Show Replies (⌃⌥B)")) {
+                settings.value.showReplyPanel.toggle()
+            }
+            moreMenu(size: 26)
+            IconButton(symbol: "arrow.up.left.and.arrow.down.right", theme: theme,
+                       help: tr("展开成完整悬浮窗（⌃⌥M 换大小）", "Expand to the full overlay (⌃⌥M changes size)"), size: 26) {
+                settings.value.overlayLayout = .full
+            }
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .gesture(WindowDragGesture())
+        .overlay {
+            if let toast = session.toast { ToastView(toast: toast, theme: theme, compact: true) }
+        }
+        .animation(.easeOut(duration: 0.2), value: session.toast)
+        .overlaySurface(theme: theme, opacity: settings.value.overlayOpacity, flat: flatForPreview, cornerRadius: 16)
+    }
+
+    /// 字幕条、按钮条地方小，提示收成一个橙色图标，点开看
+    private func noticeButton(_ notice: String, size: CGFloat) -> some View {
+        Button { showNotice.toggle() } label: {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: size * 0.55, weight: .semibold))
+                .foregroundStyle(.orange)
+                .frame(width: size, height: size)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(notice)
+        .popover(isPresented: $showNotice, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(notice).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                HStack {
+                    if session.noticeOpensTranslation {
+                        Button(tr("去下载", "Download")) {
+                            showNotice = false
+                            actions.openTranslation()
+                        }
+                    }
+                    Spacer()
+                    Button(tr("关掉提示", "Dismiss")) {
+                        showNotice = false
+                        session.notice = nil
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(12)
+            .frame(width: 300)
+        }
     }
 
     // MARK: - 字幕
@@ -354,15 +559,20 @@ struct Hairline: View {
 struct ToastView: View {
     let toast: SessionModel.Toast
     let theme: OverlayTheme
+    /// 字幕条、按钮条上：一行，矮一点
+    var compact = false
 
     var body: some View {
         HStack(spacing: 7) {
             Image(systemName: toast.ok ? "checkmark.circle.fill" : "info.circle.fill")
                 .foregroundStyle(toast.ok ? theme.accent : theme.ink.opacity(0.6))
-            Text(toast.text).font(.system(size: 12, weight: .medium)).fixedSize(horizontal: false, vertical: true)
+            Text(toast.text)
+                .font(.system(size: compact ? 11.5 : 12, weight: .medium))
+                .lineLimit(compact ? 1 : nil)
+                .fixedSize(horizontal: false, vertical: !compact)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, compact ? 5 : 8)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(theme.tint.opacity(0.96)))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.ink.opacity(0.12)))
         .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
@@ -407,6 +617,32 @@ private struct ListenButton: View {
         return seconds >= 3600
             ? String(format: "%d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
             : String(format: "%02d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
+/// 字幕条上的开始/停止：没在听是红点，在听是跳动的音量条
+private struct MiniListenButton: View {
+    @ObservedObject var session: SessionModel
+    let theme: OverlayTheme
+
+    var body: some View {
+        Button(action: session.toggle) {
+            ZStack {
+                Circle().fill(session.isRunning ? theme.accent.opacity(0.16) : theme.ink.opacity(0.08))
+                Circle().strokeBorder(session.isRunning ? theme.accent.opacity(0.5) : theme.ink.opacity(0.12))
+                if session.isRunning {
+                    LevelBars(level: max(session.levels[.remote] ?? 0, session.levels[.local] ?? 0), color: theme.accent)
+                        .scaleEffect(0.8)
+                } else {
+                    Circle().fill(Color(red: 1, green: 0.38, blue: 0.40)).frame(width: 8, height: 8)
+                }
+            }
+            .frame(width: 26, height: 26)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(session.isStarting)
+        .help(session.isRunning ? tr("停止（⌃⌥L）", "Stop (⌃⌥L)") : tr("开始听（⌃⌥L）", "Start Listening (⌃⌥L)"))
     }
 }
 
