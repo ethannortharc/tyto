@@ -128,9 +128,9 @@ private struct RecordDetail: View {
     @State private var title = ""
     @State private var copied = false
 
-    /// 正在开的这场直接看会话（实时更新），别的读文件
     private var isCurrent: Bool { summary.file == session.recordFile }
-    private var record: MeetingRecord? { isCurrent ? session.snapshot() : loaded }
+    /// 都读文件：正在开的这场每隔两三秒自动存一次，文件一变这里跟着重读（不随每次音量刷新重算整场）
+    private var record: MeetingRecord? { loaded }
 
     var body: some View {
         Group {
@@ -141,7 +141,6 @@ private struct RecordDetail: View {
             }
         }
         .task(id: summary.modifiedAt) {
-            guard !isCurrent else { return }
             let url = records.url(summary.file)
             loaded = await Task.detached(priority: .userInitiated) {
                 (try? Data(contentsOf: url)).flatMap { try? JSONDecoder().decode(MeetingRecord.self, from: $0) }

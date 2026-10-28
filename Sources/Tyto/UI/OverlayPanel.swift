@@ -103,6 +103,8 @@ final class OverlayPanel: NSPanel {
                 setFrame(Self.defaultFrame(layout, in: area, near: frame, captionLines: captionLines, fontSize: fontSize),
                          display: true)
             }
+            // 接上新名字的自动记录（会把那个名字下存的位置再套一遍），所以放在下面改高度之前
+            if remembersFrame { setFrameAutosaveName(frameName(layout)) }
         }
         // 字幕条按行数定高度，按钮条高度固定；都是上边不动
         let height: CGFloat? = switch layout {
@@ -116,7 +118,6 @@ final class OverlayPanel: NSPanel {
             target.size.height = height
             setFrame(Self.clamp(target, to: area), display: true)
         }
-        if remembersFrame, switching { setFrameAutosaveName(frameName(layout)) }
     }
 
     /// 字幕条：高度只能按整行变（拖下边时一行一行地跳），1～4 行；按钮条：高度固定

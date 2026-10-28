@@ -156,7 +156,7 @@ struct OverlayView: View {
             }
             Section(tr("会议记录", "Meeting Records")) {
                 if session.recordFile == nil {
-                    Button(action: session.saveToRecords) {
+                    Button { session.saveToRecords() } label: {
                         Label(tr("保存到会议记录", "Save to Meeting Records"), systemImage: "tray.and.arrow.down")
                     }
                     .disabled(session.isEmpty)

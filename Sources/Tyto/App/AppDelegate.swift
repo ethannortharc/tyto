@@ -552,7 +552,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         add(app, titled: "Tyto", to: main)
 
         let file = NSMenu(title: tr("文件", "File"))
-        file.addItem(command(tr("保存到会议记录", "Save to Meeting Records"), #selector(saveRecordAction), "s", target: self))
+        // ⌘S 留给技能页的「保存」
+        file.addItem(command(tr("保存到会议记录", "Save to Meeting Records"), #selector(saveRecordAction), "s",
+                             modifiers: [.command, .shift], target: self))
         file.addItem(command(tr("清空，开始新会议", "Clear, New Meeting"), #selector(clearSessionAction), "n", target: self))
         file.addItem(command(tr("导出记录…", "Export Transcript…"), #selector(exportSessionAction), "e",
                              modifiers: [.command, .shift], target: self))

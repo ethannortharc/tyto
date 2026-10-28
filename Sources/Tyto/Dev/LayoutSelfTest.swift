@@ -78,6 +78,10 @@ extension SelfTest {
             check(remembering.frame == full, "从字幕条换回完整：回到原来的位置和大小")
             remembering.apply(.captions, captionLines: 2, fontSize: 14)
             check(remembering.frame == moved, "再换成字幕条：回到上次拖到的位置")
+            remembering.apply(.full, captionLines: 2, fontSize: 14)
+            remembering.apply(.captions, captionLines: 2, fontSize: 18)
+            check(remembering.frame.height == CaptionBar.height(lines: 2, fontSize: 18) && remembering.frame.maxY == moved.maxY,
+                  "在完整大小里换了字号再换回字幕条：高度按新字号算，上边还在原处")
             for layout in OverlayLayout.allCases {
                 UserDefaults.standard.removeObject(forKey: "NSWindow Frame \(remembering.frameName(layout))")
             }

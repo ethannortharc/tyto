@@ -320,7 +320,7 @@ private struct SessionPage: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(session.isStarting)
-                    Button(action: session.saveToRecords) {
+                    Button { session.saveToRecords() } label: {
                         Label(session.recordFile == nil ? tr("保存到会议记录", "Save to Meeting Records") : tr("已在会议记录里", "In Meeting Records"),
                               systemImage: session.recordFile == nil ? "tray.and.arrow.down" : "checkmark.circle")
                     }

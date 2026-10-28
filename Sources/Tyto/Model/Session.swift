@@ -31,6 +31,10 @@ final class SessionModel: ObservableObject {
     @Published private(set) var recordFile: String?
     /// 一闪而过的确认（"已保存到会议记录"），几秒后自己消失
     @Published private(set) var toast: Toast?
+    /// 正在清空或打开别的会议（要停下来、等最后几句的译文，花一两秒）；这期间不接第二个
+    @Published private(set) var isSwitching = false
+    /// 最近一次存盘出的错；存成功后清掉
+    private(set) var saveError: String?
 
     struct Toast: Equatable {
         let text: String
@@ -50,6 +54,8 @@ final class SessionModel: ObservableObject {
     private var pipelines: [Channel: Pipeline] = [:]
     private var openRow: [Channel: UUID] = [:]
     private var translationTasks: [UUID: Task<Void, Never>] = [:]
+    /// 每句还有几个翻译在路上（清空前等它们回来）
+    private var translating: [UUID: Int] = [:]
     private var replyTask: Task<Void, Never>?
     private var tickTask: Task<Void, Never>?
     private var saveTask: Task<Void, Never>?
@@ -342,11 +348,18 @@ final class SessionModel: ObservableObject {
     private func scheduleTranslation(_ id: UUID, after delay: Duration) {
         guard settings.value.translationEnabled else { return }
         translationTasks[id]?.cancel()
+        translating[id, default: 0] += 1
         translationTasks[id] = Task { [weak self] in
+            defer { self?.translationFinished(id) }
             if delay > .zero { try? await Task.sleep(for: delay) }
             guard !Task.isCancelled else { return }
             await self?.translate(id)
         }
+    }
+
+    private func translationFinished(_ id: UUID) {
+        let left = (translating[id] ?? 1) - 1
+        translating[id] = left > 0 ? left : nil
     }
 
     private func translate(_ id: UUID) async {
@@ -695,51 +708,85 @@ final class SessionModel: ObservableObject {
         }
     }
 
-    /// 存 current.json；已经存进会议记录的，那个文件也一起更新
-    func save() {
-        guard persists else { return }
+    /// 存 current.json；已经存进会议记录的，那个文件也一起更新。存不上返回 false，原因在 saveError
+    @discardableResult
+    func save() -> Bool {
+        guard persists else { return true }
         saveTask?.cancel()
         let record = snapshot()
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        guard let data = try? JSONEncoder().encode(record) else { return }
-        try? data.write(to: currentFile, options: .atomic)
-        if let recordFile {
-            var kept = record
-            kept.recordFile = nil
-            if let data = try? JSONEncoder().encode(kept) {
-                try? data.write(to: folder.appending(path: recordFile), options: .atomic)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try JSONEncoder().encode(record).write(to: currentFile, options: .atomic)
+            if let recordFile {
+                var kept = record
+                kept.recordFile = nil
+                try JSONEncoder().encode(kept).write(to: folder.appending(path: recordFile), options: .atomic)
+                NotificationCenter.default.post(name: MeetingRecords.changed, object: nil)
             }
-            NotificationCenter.default.post(name: MeetingRecords.changed, object: nil)
+            saveError = nil
+            return true
+        } catch {
+            if saveError != error.localizedDescription { RunLog.write("存不了会话：\(error.localizedDescription)") }
+            saveError = error.localizedDescription
+            return false
         }
     }
 
-    /// 存进会议记录。之后这场的改动会自动跟着存进去，不用再点
-    func saveToRecords() {
+    /// 存进会议记录。之后这场的改动会自动跟着存进去，不用再点。存上了返回 true
+    @discardableResult
+    func saveToRecords() -> Bool {
         guard !isEmpty else {
             show(tr("还没有内容可保存", "Nothing to save yet"), ok: false)
-            return
+            return false
         }
-        guard recordFile == nil else {
-            save()
-            show(tr("已保存", "Saved"))
-            return
+        let isNew = recordFile == nil
+        if isNew {
+            var name = MeetingRecord.fileName(id: sessionID, startedAt: snapshot().startedAt)
+            // 这个名字被别的文件占了（极少见）就换个编号
+            if FileManager.default.fileExists(atPath: folder.appending(path: name).path) {
+                sessionID = UUID()
+                name = MeetingRecord.fileName(id: sessionID, startedAt: snapshot().startedAt)
+            }
+            recordFile = name
         }
-        var name = MeetingRecord.fileName(id: sessionID, startedAt: snapshot().startedAt)
-        // 这个名字被别的文件占了（极少见）就换个编号
-        if FileManager.default.fileExists(atPath: folder.appending(path: name).path) {
-            sessionID = UUID()
-            name = MeetingRecord.fileName(id: sessionID, startedAt: snapshot().startedAt)
+        guard save() else {
+            if isNew { recordFile = nil }
+            show(tr("没存上：\(saveError ?? "")", "Couldn't save: \(saveError ?? "")"), ok: false)
+            return false
         }
-        recordFile = name
-        save()
-        show(tr("已保存到会议记录，之后的内容会自动存进去", "Saved to Meeting Records; new lines are saved as they come"))
+        show(isNew ? tr("已保存到会议记录，之后的内容会自动存进去", "Saved to Meeting Records; new lines are saved as they come")
+                   : tr("已保存", "Saved"))
+        return true
     }
 
-    /// 清空，开始新会议。存没存进会议记录由调用的地方先问好；这里不再存。
-    /// 背景、关键词、技能留着，下一场常常用得上
-    func clear() async {
+    /// 清空、打开别的会议之前：停下来，等最后几句的译文回来（最多 4 秒），停掉还在生成的回复，
+    /// 这样存进会议记录的是完整的。返回之前在不在听（换完接着听）
+    private func wrapUp() async -> Bool {
+        let wasRunning = isRunning
         if isRunning { await stop() }
-        if recordFile != nil { save() }
+        for _ in 0..<40 where rows.contains(where: { translating[$0.id] != nil }) {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        replyTask?.cancel()
+        for _ in 0..<10 where replies.last?.isStreaming == true {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return wasRunning
+    }
+
+    /// 清空，开始新会议。存没存进会议记录由调用的地方先问好。
+    /// 背景、关键词、技能留着，下一场常常用得上；之前在听的，换完接着听。
+    /// 已经在会议记录里的这场最后存不上时不清空，返回 false
+    @discardableResult
+    func clear() async -> Bool {
+        guard !isSwitching else { return false }
+        isSwitching = true
+        defer { isSwitching = false }
+        let wasRunning = await wrapUp()
+        if recordFile != nil, !save() {
+            notice = tr("会议记录没存上（\(saveError ?? "")），这场先不清空", "Couldn't save to Meeting Records (\(saveError ?? "")); the meeting was not cleared")
+            return false
+        }
         rows = []
         replies = []
         selection = []
@@ -750,17 +797,29 @@ final class SessionModel: ObservableObject {
         recordFile = nil
         save()
         NotificationCenter.default.post(name: MeetingRecords.changed, object: nil)
+        if wasRunning { await start() }
+        return true
     }
 
-    /// 打开会议记录里的一场，接着记（现在这场要不要先存，由调用的地方先问好）
-    func open(_ record: MeetingRecord, file: String) async {
-        if isRunning { await stop() }
-        if recordFile != nil { save() }
+    /// 打开会议记录里的一场接着记（现在这场要不要先存，由调用的地方先问好）；之前在听的，打开后接着听
+    @discardableResult
+    func open(_ record: MeetingRecord, file: String) async -> Bool {
+        guard !isSwitching else { return false }
+        isSwitching = true
+        defer { isSwitching = false }
+        let wasRunning = await wrapUp()
+        if recordFile != nil, !save() {
+            notice = tr("会议记录没存上（\(saveError ?? "")），先不打开别的会议", "Couldn't save to Meeting Records (\(saveError ?? "")); nothing else was opened")
+            return false
+        }
         apply(record)
         recordFile = file
         // 老文件没有编号：补上，写回原来的文件
         save()
-        show(tr("已打开「\(record.title)」，开始听会接着记在这场里", "Opened “\(record.title)”; listening continues in this meeting"))
+        if wasRunning { await start() }
+        show(wasRunning ? tr("已打开「\(record.title)」，接着记在这场里", "Opened “\(record.title)”; new lines go into this meeting")
+                        : tr("已打开「\(record.title)」，开始听会接着记在这场里", "Opened “\(record.title)”; listening continues in this meeting"))
+        return true
     }
 
     /// 会议记录里这场被删了：当前会议变回没保存

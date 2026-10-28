@@ -109,6 +109,21 @@ extension SelfTest {
         await waitForList(1)
         check(store.items.map(\.file) == [second], "列表跟着更新")
 
+        // 存不上（文件夹只读）：不假装存上，不清空
+        let readOnly = folder.appending(path: "readonly")
+        let stuck = SessionModel(settings: settings, skills: SkillStore(), persists: true, folder: readOnly)
+        stuck.showSample(rows: rows, replies: [], selection: [])
+        try? FileManager.default.createDirectory(at: readOnly, withIntermediateDirectories: true)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: readOnly.path)
+        check(!stuck.saveToRecords() && stuck.recordFile == nil && stuck.saveError != nil && stuck.toast?.ok == false,
+              "存不上时：说没存上，不算已保存")
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: readOnly.path)
+        check(stuck.saveToRecords(), "能写了再存：存上")
+        try? FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: readOnly.path)
+        let cleared = await stuck.clear()
+        check(!cleared && stuck.rows.count == rows.count && stuck.notice != nil, "最后存不上时不清空，留着内容并提示")
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: readOnly.path)
+
         let markdown = firstRecord.markdown()
         check(markdown.contains("# Northwind 方案评审") && markdown.contains("December") && markdown.contains("十二月"),
               "导出的 Markdown 有会议名、原文和译文")

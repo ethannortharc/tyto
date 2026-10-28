@@ -49,7 +49,7 @@ struct MeetingRecord: Codable {
     }
 
     func markdown() -> String {
-        let formatter = DateFormatter()
+        let formatter = Self.fixedFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         var text = "# \(title)\n\n"
         if let start = startedAt { text += "\(formatter.string(from: start))\n\n" }
@@ -80,15 +80,23 @@ struct MeetingRecord: Codable {
 
     /// 导出时建议的文件名：会议名 + 日期
     var suggestedFileName: String {
-        let formatter = DateFormatter()
+        let formatter = Self.fixedFormatter()
         formatter.dateFormat = "yyyy-MM-dd HHmm"
         let name = title.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
         return startedAt.map { "\(name) \(formatter.string(from: $0))" } ?? name
     }
 
+    /// 文件名、导出里的日期：固定公历和数字写法，不随系统的日历、地区变
+    static func fixedFormatter() -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        return formatter
+    }
+
     /// 会议记录里的文件名：开始时间 + id 前 8 位（改会议名不改文件名）
     static func fileName(id: UUID, startedAt: Date?) -> String {
-        let formatter = DateFormatter()
+        let formatter = fixedFormatter()
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         return "\(formatter.string(from: startedAt ?? .now))-\(id.uuidString.prefix(8).lowercased()).json"
     }

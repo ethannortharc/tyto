@@ -6,10 +6,10 @@ import UniformTypeIdentifiers
 enum MeetingCommands {
     /// 清空，开始新会议。有内容还没存进会议记录的，先问存不存
     static func clear(_ session: SessionModel) {
-        guard !session.isEmpty else { return }
+        guard !session.isEmpty, !session.isSwitching else { return }
         guard let saved = confirmLeaving(session, opening: nil) else { return }
         Task {
-            await session.clear()
+            guard await session.clear() else { return }
             session.show(saved ? tr("已存进会议记录，开始新会议", "Saved to Meeting Records; new meeting started")
                                : tr("已清空，开始新会议", "Cleared; new meeting started"))
         }
@@ -17,17 +17,18 @@ enum MeetingCommands {
 
     /// 打开会议记录里的一场接着记
     static func open(_ file: String, in records: MeetingRecords, session: SessionModel) {
-        guard file != session.recordFile, let record = records.record(file) else { return }
+        guard file != session.recordFile, !session.isSwitching, let record = records.record(file) else { return }
         guard confirmLeaving(session, opening: record.title) != nil else { return }
         Task { await session.open(record, file: file) }
     }
 
     /// 现在这场有没存的内容时问：保存 / 不保存 / 取消。
-    /// 返回 nil 是取消；true 是存了；false 是没内容要存或选了不保存
+    /// 返回 nil 是取消（或没存上）；true 是存了；false 是没内容要存或选了不保存
     private static func confirmLeaving(_ session: SessionModel, opening next: String?) -> Bool? {
         guard session.hasUnsavedContent else { return false }
         NSApp.activate()
         let alert = NSAlert()
+        raise(alert.window)
         alert.messageText = tr("这场会议还没存进会议记录", "This meeting isn't in Meeting Records yet")
         alert.informativeText = next.map {
             tr("打开「\($0)」之前，要先保存现在这场吗？不保存的话，现在的记录就清掉了。",
@@ -39,7 +40,14 @@ enum MeetingCommands {
         alert.addButton(withTitle: tr("取消", "Cancel"))
         switch alert.runModal() {
         case .alertFirstButtonReturn:
-            session.saveToRecords()
+            guard session.saveToRecords() else {
+                let failed = NSAlert()
+                failed.messageText = tr("没存上，这场先不动", "Couldn't save; the meeting was left as it is")
+                failed.informativeText = session.saveError ?? ""
+                raise(failed.window)
+                failed.runModal()
+                return nil
+            }
             return true
         case .alertSecondButtonReturn:
             return false
@@ -53,6 +61,7 @@ enum MeetingCommands {
         guard !record.isEmpty else { return }
         NSApp.activate()
         let panel = NSSavePanel()
+        raise(panel)
         panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
         panel.nameFieldStringValue = "\(record.suggestedFileName).md"
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -60,8 +69,16 @@ enum MeetingCommands {
             try record.markdown().write(to: url, atomically: true, encoding: .utf8)
         } catch {
             let alert = NSAlert(error: error)
+            raise(alert.window)
             alert.runModal()
         }
+    }
+
+    /// 对话框放到悬浮窗上面（悬浮窗是状态栏那一层，比对话框高），全屏的会议软件里也在当前桌面弹出
+    private static func raise(_ window: NSWindow) {
+        window.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
+        window.collectionBehavior.insert(.fullScreenAuxiliary)
+        window.collectionBehavior.insert(.moveToActiveSpace)
     }
 
     /// 删除会议记录里的一场（移到废纸篓），先确认
